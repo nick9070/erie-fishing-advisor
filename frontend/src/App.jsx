@@ -14,6 +14,7 @@ export default function App() {
   const [error, setError]               = useState(null)
   const [lastUpdated, setLastUpdated]   = useState(null)
   const [mobileTab, setMobileTab]       = useState('list') // 'map' | 'list'
+  const [mapKey, setMapKey]             = useState(0)
 
   const { location, error: geoError } = useGeolocation()
 
@@ -99,7 +100,7 @@ export default function App() {
         >📋 Spots</button>
         <button
           className={`mobile-tab ${mobileTab === 'map' ? 'active' : ''}`}
-          onClick={() => setMobileTab('map')}
+          onClick={() => { setMobileTab('map'); setMapKey(k => k + 1) }}
         >🗺 Map</button>
       </div>
 
@@ -107,6 +108,7 @@ export default function App() {
         <div className={`map-panel ${mobileTab === 'map' ? 'mobile-visible' : 'mobile-hidden'}`}>
           {spotsData ? (
             <FishingMap
+              key={mapKey}
               spots={spotsData.spots}
               selectedSpot={selectedSpot}
               onSelectSpot={(spot) => { setSelectedSpot(spot); setMobileTab('list') }}

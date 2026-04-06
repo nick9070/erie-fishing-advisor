@@ -210,28 +210,20 @@ body {
     display: flex;
   }
 
-  .app-body {
-    position: relative;
-  }
-
-  .map-panel,
-  .list-panel {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    border: none;
-  }
-
-  .mobile-hidden {
+  .map-panel.mobile-hidden,
+  .list-panel.mobile-hidden {
     display: none;
   }
 
-  .mobile-visible {
-    display: flex;
-    flex-direction: column;
+  .map-panel.mobile-visible {
+    width: 100%;
+    flex: 1;
   }
 
   .list-panel.mobile-visible {
+    width: 100%;
+    flex: 1;
+    border-left: none;
     overflow-y: auto;
   }
 }
