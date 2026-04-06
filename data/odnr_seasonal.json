@@ -1,0 +1,60 @@
+{
+  "_source": "Ohio DNR Lake Erie Fisheries 2024 Annual Report + Ohio Sea Grant telemetry study",
+  "_notes": [
+    "Catch rate 2024: 0.75 fish/hour — above average, ranked 6th since 2006",
+    "Harvest rate: 3% (predominantly catch-and-release)",
+    "Average harvested size: 17.1 inches, 3.0 lbs",
+    "210 bass tagged across Lake Erie 2023-2024, tracked via 400+ acoustic receivers through 2027",
+    "Most bass maintain home ranges under 5 sq miles; subset make long-distance migrations (one fish 500 miles)",
+    "Angling-caught fish move nearly 2x farther than electrofishing-caught fish post-tagging",
+    "Eastern basin: bass avoid deep central basin hypoxia, use full water column",
+    "Round goby makes up 73-75% of eastern basin smallmouth diet",
+    "Post-goby invasion: a 6-inch bass is ~17% heavier than pre-goby equivalent",
+    "Ontario FMZ 19 abundance above target (1.00 fish/hr) during 2016-2020",
+    "World record smallmouth: 10.15 lbs, October 2022, Lake Erie",
+    "2025 CAUTION: ODNR reports REDUCED adult populations in central and east zones due to poor 2022-2023 year-class hatches. Expect fewer fish but larger average size from surviving adults.",
+    "East basin historical catch rate target: 1.00 fish/hr (highest of all three basins)",
+    "Largemouth bass displacing smallmouth in western basin — less relevant to eastern basin fishing"
+  ],
+  "population_outlook_2025": {
+    "east_basin": "reduced",
+    "central_basin": "reduced",
+    "west_basin": "exceptional",
+    "cause": "Poor year-class recruitment in 2022-2023",
+    "implication": "Fewer numbers but larger fish. Focus on high-probability spots. Don't leave fish to find fish."
+  },
+  "activity_peaks": {
+    "primary": ["april", "october"],
+    "secondary": ["may", "september", "november"],
+    "low": ["december", "january", "february", "march"]
+  },
+  "eastern_basin_season_calendar": {
+    "pre_spawn_staging":   { "months": [4, 5],    "depth_ft": [25, 35], "behavior": "Moving toward spawning grounds along first major break lines" },
+    "spawn":               { "months": [6],        "depth_ft": [10, 20], "behavior": "On nests, rock/gravel/sand, 55-65°F trigger. Peaks early-mid June (2-3 wks after western basin)" },
+    "post_spawn":          { "months": [6, 7],     "depth_ft": [20, 32], "behavior": "Dispersing from spawning areas to offshore rock humps and ledges" },
+    "summer_deep":         { "months": [7, 8],     "depth_ft": [20, 50], "behavior": "Thermocline drives deeper. Goby-imitating tube jigs / drop-shot. 20-32ft typical, 50+ in August heat" },
+    "fall_staging":        { "months": [9, 10, 11],"depth_ft": [30, 45], "behavior": "October peak — fat fish chasing bait before winter. Rocky points in 30-45ft. Most predictable window of the year" },
+    "winter":              { "months": [12, 1, 2, 3], "depth_ft": [35, 60], "behavior": "Inactive. Eastern basin fish drop to 35-50ft thermal refuge" }
+  },
+  "lake_wide_monthly_modifier": {
+    "1":  -25,
+    "2":  -25,
+    "3":  -15,
+    "4":   12,
+    "5":   18,
+    "6":   18,
+    "7":   22,
+    "8":   22,
+    "9":   20,
+    "10":  25,
+    "11":  12,
+    "12": -20
+  },
+  "presentation_by_season": {
+    "pre_spawn":  ["tube jigs", "swimbait", "jerkbait", "ned rig"],
+    "spawn":      ["drop-shot", "ned rig", "tube jig near bottom", "finesse worm"],
+    "post_spawn": ["tube jig", "swimbait", "ned rig", "drop-shot goby"],
+    "summer":     ["drop-shot goby plastic", "tube jig", "ned rig", "swimbait deep"],
+    "fall":       ["tube jig", "swimbait", "jerkbait", "drop-shot", "crankbait rocky points"]
+  }
+}

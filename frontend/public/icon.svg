@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#0d1f2d"/>
+  <!-- Water -->
+  <ellipse cx="256" cy="370" rx="200" ry="40" fill="#0ea5e9" opacity="0.25"/>
+  <!-- Fish body -->
+  <ellipse cx="240" cy="256" rx="110" ry="58" fill="#38bdf8"/>
+  <!-- Fish tail -->
+  <polygon points="360,256 410,210 410,302" fill="#0ea5e9"/>
+  <!-- Fish eye -->
+  <circle cx="170" cy="245" r="14" fill="#0d1f2d"/>
+  <circle cx="167" cy="242" r="5" fill="white"/>
+  <!-- Fishing line -->
+  <line x1="256" y1="60" x2="256" y2="190" stroke="#94a3b8" stroke-width="3" stroke-dasharray="6,4"/>
+  <!-- Hook -->
+  <path d="M256 190 Q256 230 235 240" stroke="#facc15" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- Rod tip suggestion -->
+  <circle cx="256" cy="58" r="6" fill="#facc15"/>
+</svg>
