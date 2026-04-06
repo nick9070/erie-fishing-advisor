@@ -12,3 +12,6 @@ frontend/.env
 # Misc
 .DS_Store
 *.log
+
+# Local Netlify folder
+.netlify
