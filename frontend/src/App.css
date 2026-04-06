@@ -179,3 +179,59 @@ body {
   background: #0d1f2d;
   border-left: 1px solid #1e3a4a;
 }
+
+/* ── Mobile tabs ── */
+.mobile-tabs {
+  display: none;
+  flex-shrink: 0;
+  background: #0d1f2d;
+  border-bottom: 1px solid #1e3a4a;
+}
+
+.mobile-tab {
+  flex: 1;
+  padding: 10px;
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.mobile-tab.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+}
+
+@media (max-width: 700px) {
+  .mobile-tabs {
+    display: flex;
+  }
+
+  .app-body {
+    position: relative;
+  }
+
+  .map-panel,
+  .list-panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: none;
+  }
+
+  .mobile-hidden {
+    display: none;
+  }
+
+  .mobile-visible {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .list-panel.mobile-visible {
+    overflow-y: auto;
+  }
+}

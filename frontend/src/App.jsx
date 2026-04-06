@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import FishingMap from './components/FishingMap'
 import SpotList from './components/SpotList'
 import ConditionsBar from './components/ConditionsBar'
@@ -13,6 +13,7 @@ export default function App() {
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
   const [lastUpdated, setLastUpdated]   = useState(null)
+  const [mobileTab, setMobileTab]       = useState('list') // 'map' | 'list'
 
   const { location, error: geoError } = useGeolocation()
 
@@ -91,13 +92,24 @@ export default function App() {
         <ConditionsBar conditions={spotsData.conditions_summary} season={spotsData.season} />
       )}
 
+      <div className="mobile-tabs">
+        <button
+          className={`mobile-tab ${mobileTab === 'list' ? 'active' : ''}`}
+          onClick={() => setMobileTab('list')}
+        >📋 Spots</button>
+        <button
+          className={`mobile-tab ${mobileTab === 'map' ? 'active' : ''}`}
+          onClick={() => setMobileTab('map')}
+        >🗺 Map</button>
+      </div>
+
       <div className="app-body">
-        <div className="map-panel">
+        <div className={`map-panel ${mobileTab === 'map' ? 'mobile-visible' : 'mobile-hidden'}`}>
           {spotsData ? (
             <FishingMap
               spots={spotsData.spots}
               selectedSpot={selectedSpot}
-              onSelectSpot={setSelectedSpot}
+              onSelectSpot={(spot) => { setSelectedSpot(spot); setMobileTab('list') }}
               userLocation={location}
             />
           ) : loading ? (
@@ -108,7 +120,7 @@ export default function App() {
           ) : null}
         </div>
 
-        <div className="list-panel">
+        <div className={`list-panel ${mobileTab === 'list' ? 'mobile-visible' : 'mobile-hidden'}`}>
           {spotsData && (
             <SpotList
               spots={spotsData.spots}

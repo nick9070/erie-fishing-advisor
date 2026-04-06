@@ -72,9 +72,12 @@ function AiExplain({ spot, conditions, apiBase }) {
     )
   }
   return (
-    <button className="ai-btn" onClick={handleFetch} disabled={loading}>
-      {loading ? '⟳ Thinking...' : '🤖 Ask AI Guide'}
-    </button>
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <button className="ai-btn" onClick={handleFetch} disabled={loading}>
+        {loading ? '⟳ Thinking...' : '🤖 Ask AI Guide'}
+      </button>
+      {error && <span style={{ fontSize: 11, color: '#f87171' }}>{error}</span>}
+    </div>
   )
 }
 
