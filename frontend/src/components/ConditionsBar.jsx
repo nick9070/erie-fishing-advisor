@@ -1,19 +1,24 @@
-const TREND_ICON  = { rising: '↑', falling: '↓', stable: '→' }
-const TREND_COLOR = { rising: '#4ade80', falling: '#f87171', stable: '#94a3b8' }
+const TREND_ICON  = { rising_fast: '↑↑', rising: '↑', stable: '→', falling: '↓', falling_fast: '↓↓' }
+const TREND_COLOR = { rising_fast: '#f87171', rising: '#fb923c', stable: '#4ade80', falling: '#facc15', falling_fast: '#f87171' }
+const TREND_LABEL = { rising_fast: 'rising fast', rising: 'rising', stable: 'stable', falling: 'falling', falling_fast: 'falling fast' }
 
 export default function ConditionsBar({ conditions, season }) {
   const {
     water_temp_f,
     pressure_hpa,
     pressure_trend,
+    pressure_rate_mb_hr,
     wind_speed_mph,
+    wind_gust_mph,
     wind_dir_label,
     cloud_cover_pct,
     conditions: sky,
+    buoy_name,
   } = conditions
 
   const trendIcon  = TREND_ICON[pressure_trend]  ?? '→'
   const trendColor = TREND_COLOR[pressure_trend] ?? '#94a3b8'
+  const trendLabel = TREND_LABEL[pressure_trend] ?? pressure_trend
   const hour = new Date().getHours()
   const month = new Date().getMonth() + 1
 
@@ -32,13 +37,23 @@ export default function ConditionsBar({ conditions, season }) {
           label="Pressure"
           value={`${pressure_hpa?.toFixed(0)} hPa`}
           icon="🔵"
-          suffix={<span style={{ color: trendColor, fontWeight: 700 }}>{trendIcon} {pressure_trend}</span>}
+          suffix={
+            <span style={{ color: trendColor, fontWeight: 700 }}>
+              {trendIcon} {trendLabel}
+              {pressure_rate_mb_hr != null && Math.abs(pressure_rate_mb_hr) >= 0.3
+                ? ` (${pressure_rate_mb_hr > 0 ? '+' : ''}${pressure_rate_mb_hr.toFixed(1)}/hr)`
+                : ''}
+            </span>
+          }
         />
         <Stat
           label="Wind"
           value={`${wind_speed_mph?.toFixed(0)} mph ${wind_dir_label ?? ''}`}
           icon="💨"
           color={getWindColor(wind_speed_mph)}
+          suffix={wind_gust_mph > wind_speed_mph + 3
+            ? <span style={{ color: '#94a3b8', fontSize: 11 }}>gusts {wind_gust_mph?.toFixed(0)}</span>
+            : null}
         />
         <Stat
           label="Sky"
@@ -55,6 +70,12 @@ export default function ConditionsBar({ conditions, season }) {
           />
         )}
       </div>
+
+      {buoy_name && (
+        <div className="data-source-bar">
+          📡 On-lake data: NOAA NDBC {buoy_name} · Sky: Open-Meteo (ECMWF)
+        </div>
+      )}
 
       {shallowBite.active && (
         <div className={`shallow-bite-banner ${shallowBite.strength}`}>
@@ -120,9 +141,10 @@ function getTempColor(temp) {
 
 function getWindColor(mph) {
   if (!mph) return '#94a3b8'
-  if (mph <= 15) return '#4ade80'
-  if (mph <= 20) return '#facc15'
-  return '#f87171'
+  if (mph >= 10 && mph <= 20) return '#4ade80'  // research: >2x catch rate in this range
+  if (mph < 10) return '#facc15'                 // calm — decent but fish less concentrated
+  if (mph <= 25) return '#fb923c'                // rough but fishable
+  return '#f87171'                               // too rough
 }
 
 function getSkyIcon(pct) {
@@ -204,4 +226,13 @@ const styles = `
 .shallow-bite-icon { font-size: 16px; }
 .shallow-bite-title { font-weight: 700; }
 .shallow-bite-reason { opacity: 0.85; }
+
+.data-source-bar {
+  padding: 4px 20px;
+  font-size: 10px;
+  color: #475569;
+  background: #0a1a2a;
+  border-bottom: 1px solid #1e3a4a;
+  letter-spacing: 0.2px;
+}
 `
