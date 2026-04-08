@@ -2,18 +2,24 @@
 Core scoring engine — combines all factors into a per-spot score (0-100).
 
 Weights (must sum to 1.0):
-  water_temp    0.24  — most critical biological driver
-  pressure      0.17  — barometric pressure + trend
-  wind          0.13  — speed + direction vs spot
-  solunar       0.12  — moon-based feeding periods
+  water_temp    0.27  — most critical biological driver (Brownscombe 2024: peak 17-24°C)
+  pressure      0.20  — barometric pressure + rate of change (Manns obs. data; Lang 2023)
+  wind          0.13  — speed + direction vs spot (>2x catch rate at 10-20 mph)
+  solunar       0.06  — lunar feeding periods (Stuart 2023: tables don't predict CPUE)
   monthly_qual  0.18  — spot-specific monthly quality (research-backed, May-Nov focused)
-  time_of_day   0.08  — dawn/dusk bonus
-  cloud_cover   0.05  — overcast extends shallow bite, sunny pushes fish deep
+  time_of_day   0.08  — dawn/dusk bonus (Suski & Ridgway 2009: fish <2m at dawn)
+  cloud_cover   0.05  — overcast extends shallow bite window
   gbif_density  0.03  — historical occurrence signal
 
-Post-score bonuses (applied after weighted sum, clamped 0-100):
-  catch_bonus:     ±20  — your personal catch history at this spot this month
-  odnr_modifier:   ±10  — lake-wide ODNR seasonal activity modifier
+Post-score modifiers (applied after weighted sum, clamped 0-100):
+  post_front:      -15 to -5   — cold front suppression (Lang 2023; Brandt 1987)
+  catch_bonus:     ±20         — personal catch history at this spot this month
+  odnr_modifier:   ±10         — lake-wide ODNR seasonal activity modifier
+
+Weight changes vs. prior version:
+  solunar    0.12 → 0.06  (peer-reviewed: not a reliable predictor)
+  water_temp 0.24 → 0.27  (strongest biological signal)
+  pressure   0.17 → 0.20  (rate-of-change now tracked; higher confidence signal)
 """
 
 import json
@@ -50,10 +56,10 @@ def _get_odnr() -> dict:
 
 
 WEIGHTS = {
-    "water_temp":   0.24,
-    "pressure":     0.17,
+    "water_temp":   0.27,   # up from 0.24 — strongest biological signal
+    "pressure":     0.20,   # up from 0.17 — rate-of-change now tracked properly
     "wind":         0.13,
-    "solunar":      0.12,
+    "solunar":      0.06,   # down from 0.12 — Stuart (2023): tables don't predict CPUE
     "monthly_qual": 0.18,
     "time_of_day":  0.08,
     "cloud_cover":  0.05,
@@ -100,7 +106,17 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
 
     total = sum(breakdown[k] * WEIGHTS[k] for k in WEIGHTS)
 
-    # --- Post-score bonuses ---
+    # --- Post-score modifiers ---
+
+    # Post-front suppression (Lang 2023; Brandt 1987)
+    # Hard front passage causes significant feeding suppression for 24-72hrs.
+    # Detected via rapidly rising pressure (front just passed through).
+    pressure_trend = conditions.get("pressure_trend", "stable")
+    front_penalty = {
+        "rising_fast": -15,  # hard front just passed — worst bite, large adults shut down
+        "rising":       -5,  # post-front recovery — still suppressed, improving
+    }.get(pressure_trend, 0)
+
     catch_bonus = 0
     if CATCH_LOG_AVAILABLE:
         catch_bonus = get_catch_bonus(spot["id"], month)
@@ -111,7 +127,7 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
         raw = odnr.get("lake_wide_monthly_modifier", {}).get(str(month), 0)
         odnr_modifier = round(raw * 0.4)
 
-    total = max(0, min(100, round(total + catch_bonus + odnr_modifier)))
+    total = max(0, min(100, round(total + front_penalty + catch_bonus + odnr_modifier)))
 
     # --- Shallow bite window ---
     shallow_bite = get_shallow_bite_status(cloud_pct, hour, month)
@@ -126,7 +142,7 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
         "score":        total,
         "rating":       _rating_label(total),
         "breakdown":    breakdown,
-        "bonuses":      {"catch_log": catch_bonus, "odnr_seasonal": odnr_modifier},
+        "bonuses":      {"catch_log": catch_bonus, "odnr_seasonal": odnr_modifier, "front_penalty": front_penalty},
         "season":       season,
         "month":        month,
         "solunar":      solunar_data,

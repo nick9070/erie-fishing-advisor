@@ -187,9 +187,14 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
                   <FactorPill label="Time" value={bd.time_of_day} />
                 </div>
 
-                {/* Bonuses from catch log / ODNR */}
-                {spot.bonuses && (spot.bonuses.catch_log !== 0 || spot.bonuses.odnr_seasonal !== 0) && (
+                {/* Score modifiers */}
+                {spot.bonuses && (spot.bonuses.catch_log !== 0 || spot.bonuses.odnr_seasonal !== 0 || spot.bonuses.front_penalty !== 0) && (
                   <div className="bonuses-row">
+                    {spot.bonuses.front_penalty !== 0 && (
+                      <span className="bonus-chip negative">
+                        🌬 Post-front {spot.bonuses.front_penalty}
+                      </span>
+                    )}
                     {spot.bonuses.catch_log !== 0 && (
                       <span className={`bonus-chip ${spot.bonuses.catch_log > 0 ? 'positive' : 'negative'}`}>
                         📔 Catch log {spot.bonuses.catch_log > 0 ? '+' : ''}{spot.bonuses.catch_log}

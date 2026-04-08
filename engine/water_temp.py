@@ -156,33 +156,57 @@ def _deg_to_compass(deg: float) -> str:
 def score_water_temp(temp_f: float | None, season: str) -> int:
     """
     Score water temperature for smallmouth bass activity.
-    Based on Brownscombe et al. (2024): physiological optimum 17-24°C (63-75°F).
-    Eastern basin fish use deeper, cooler water — ranges slightly wider.
+
+    Based on Brownscombe et al. (2024, J. Fish Biology):
+      - Aerobic scope peaks at 20°C (68°F)
+      - >90% aerobic scope: 17-24°C (63-75°F) — peak feeding/activity
+      - >50% aerobic scope: 11-28°C (52-82°F) — active but sub-optimal
+      - Below 10°C (50°F): sharply declining activity; near-zero below 7°C (45°F)
+
+    Eastern basin adjustment: fish use the metalimnion (cooler layer) in summer
+    (Ridgway et al. 2026), so high surface temps are less suppressive than they
+    would be in shallower western basin.
+
+    Ranges: (low_peak, high_peak, low_ok, high_ok)
     """
     if temp_f is None:
         return 50
 
     optimal = {
-        "pre_spawn":  (50, 63, 45, 68),   # (low_ideal, high_ideal, low_ok, high_ok)
-        "spawn":      (55, 68, 52, 72),
-        "post_spawn": (64, 74, 58, 78),
-        "summer":     (64, 76, 58, 80),
-        "fall":       (50, 68, 46, 72),
-        "winter":     (38, 48, 34, 52),
+        "pre_spawn":  (52, 63, 46, 70),   # staging fish, aggressive when water warms
+        "spawn":      (57, 68, 52, 72),   # spawn trigger 55-65°F, peaks early-mid June
+        "post_spawn": (63, 75, 55, 80),   # recovery then active feed-up
+        "summer":     (63, 75, 52, 82),   # eastern basin: fish use cool metalimnion
+        "fall":       (50, 66, 45, 72),   # aggressive pre-winter feed-up
+        "winter":     (38, 48, 34, 52),   # metabolically suppressed
     }
 
-    lo_ideal, hi_ideal, lo_ok, hi_ok = optimal.get(season, (58, 72, 50, 78))
+    lo_peak, hi_peak, lo_ok, hi_ok = optimal.get(season, (58, 72, 50, 78))
 
-    if lo_ideal <= temp_f <= hi_ideal:
-        return 95
+    if lo_peak <= temp_f <= hi_peak:
+        # Within peak range — full score, slight bonus at the physiological optimum (~68°F)
+        # Brownscombe: MMR and aerobic scope both peak near 68°F
+        dist_from_optimum = abs(temp_f - 68)
+        return 100 if dist_from_optimum <= 3 else 95
+
     elif lo_ok <= temp_f <= hi_ok:
-        if temp_f < lo_ideal:
-            score = 50 + 45 * (temp_f - lo_ok) / (lo_ideal - lo_ok)
+        # Interpolate linearly from 50 at the ok boundary to 95 at the peak boundary
+        if temp_f < lo_peak:
+            score = 50 + 45 * (temp_f - lo_ok) / (lo_peak - lo_ok)
         else:
-            score = 50 + 45 * (hi_ok - temp_f) / (hi_ok - hi_ideal)
+            score = 50 + 45 * (hi_ok - temp_f) / (hi_ok - hi_peak)
         return round(score)
+
+    elif temp_f < lo_ok:
+        # Below usable range — sharp drop per Brownscombe below 11°C (52°F)
+        if temp_f >= 45:
+            return round(15 + 35 * (temp_f - 45) / (lo_ok - 45))
+        return 5   # near-zero metabolic activity
+
     else:
-        return 10
+        # Above usable range — eastern basin fish can seek deeper cool water
+        # so penalise less than a shallow-water scenario would warrant
+        return max(5, round(50 - 5 * (temp_f - hi_ok)))
 
 
 def get_season(month: int) -> str:
