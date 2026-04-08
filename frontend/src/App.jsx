@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import FishingMap from './components/FishingMap'
 import SpotList from './components/SpotList'
 import ConditionsBar from './components/ConditionsBar'
+import ForecastView from './components/ForecastView'
 import useGeolocation from './hooks/useGeolocation'
 import './App.css'
 
@@ -102,6 +103,10 @@ export default function App() {
           className={`mobile-tab ${mobileTab === 'map' ? 'active' : ''}`}
           onClick={() => { setMobileTab('map'); setMapKey(k => k + 1) }}
         >🗺 Map</button>
+        <button
+          className={`mobile-tab ${mobileTab === 'forecast' ? 'active' : ''}`}
+          onClick={() => setMobileTab('forecast')}
+        >📅 Forecast</button>
       </div>
 
       <div className="app-body">
@@ -120,6 +125,10 @@ export default function App() {
               <p>Fetching Lake Erie conditions...</p>
             </div>
           ) : null}
+        </div>
+
+        <div className={`forecast-panel ${mobileTab === 'forecast' ? 'mobile-visible' : 'mobile-hidden'}`}>
+          <ForecastView apiBase={API} />
         </div>
 
         <div className={`list-panel ${mobileTab === 'list' ? 'mobile-visible' : 'mobile-hidden'}`}>

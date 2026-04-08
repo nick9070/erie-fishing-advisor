@@ -26,6 +26,12 @@ WMO_CODES = {
 }
 
 
+def _deg_to_compass(deg: float) -> str:
+    dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE",
+            "S","SSW","SW","WSW","W","WNW","NW","NNW"]
+    return dirs[round(deg / 22.5) % 16]
+
+
 def get_open_meteo(lat: float, lon: float) -> dict:
     """
     Fetch current sky/atmospheric conditions from Open-Meteo.
@@ -76,6 +82,69 @@ def get_open_meteo(lat: float, lon: float) -> dict:
             "wind_gust_mph":   None,
             "wind_dir_deg":    None,
         }
+
+
+def get_open_meteo_hourly(lat: float, lon: float, date_str: str) -> list:
+    """
+    Fetch 24 hourly forecast conditions from Open-Meteo for a specific date.
+    Returns a list of 24 dicts (hours 0-23, local Eastern time).
+    Pressure rate-of-change is computed from consecutive hourly values.
+    """
+    params = {
+        "latitude":  lat,
+        "longitude": lon,
+        "hourly": ",".join([
+            "temperature_2m",
+            "cloud_cover",
+            "weather_code",
+            "precipitation",
+            "surface_pressure",
+            "wind_speed_10m",
+            "wind_direction_10m",
+            "wind_gusts_10m",
+        ]),
+        "temperature_unit":   "fahrenheit",
+        "wind_speed_unit":    "mph",
+        "precipitation_unit": "mm",
+        "timezone":           "America/Toronto",
+        "start_date":         date_str,
+        "end_date":           date_str,
+    }
+    resp = requests.get(OPEN_METEO_BASE, params=params, timeout=15)
+    resp.raise_for_status()
+    data      = resp.json()["hourly"]
+    pressures = data["surface_pressure"]
+
+    hours = []
+    for i in range(24):
+        pres      = pressures[i]
+        prev_pres = pressures[i - 1] if i > 0 else pres
+        rate      = round(pres - prev_pres, 2)
+
+        if rate > 2.0:    trend = "rising_fast"
+        elif rate > 0.5:  trend = "rising"
+        elif rate < -2.0: trend = "falling_fast"
+        elif rate < -0.5: trend = "falling"
+        else:             trend = "stable"
+
+        wcode = data["weather_code"][i]
+        wdir  = data["wind_direction_10m"][i]
+
+        hours.append({
+            "temp_f":              data["temperature_2m"][i],
+            "cloud_cover_pct":     data["cloud_cover"][i],
+            "conditions":          WMO_CODES.get(wcode, "unknown"),
+            "pressure_hpa":        round(pres, 1),
+            "pressure_trend":      trend,
+            "pressure_rate_mb_hr": rate,
+            "wind_speed_mph":      data["wind_speed_10m"][i],
+            "wind_gust_mph":       data["wind_gusts_10m"][i],
+            "wind_dir_deg":        wdir,
+            "wind_dir_label":      _deg_to_compass(wdir),
+            "precipitation":       data["precipitation"][i],
+        })
+
+    return hours
 
 
 def score_pressure(pressure_hpa: float, trend: str) -> int:

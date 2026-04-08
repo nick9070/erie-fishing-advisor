@@ -26,7 +26,7 @@ try:
 except ImportError:
     pass
 
-from engine.weather import get_open_meteo, score_pressure
+from engine.weather import get_open_meteo, get_open_meteo_hourly, score_pressure
 from engine.water_temp import get_buoy_conditions, get_season
 from engine.scoring import rank_spots
 from engine.catch_log import init_db, log_catch, get_catches, get_spot_stats
@@ -46,6 +46,9 @@ app.add_middleware(
 
 _cache: dict = {}
 CACHE_TTL_SECONDS = 600
+
+_forecast_cache: dict = {}
+FORECAST_CACHE_TTL = 1800   # 30 minutes
 
 # Eastern basin center — Long Point / Fort Erie corridor
 LAKE_CENTER_LAT = 42.75
@@ -352,6 +355,110 @@ Tell me: what are the fish doing right now at this spot, exactly where and how d
         messages=[{"role": "user", "content": prompt}]
     )
     return {"explanation": message.content[0].text}
+
+
+@app.get("/api/forecast")
+def get_forecast(date: str):
+    """
+    Return hourly scoring for all spots for a given date (up to 7 days ahead).
+    Fetches Open-Meteo hourly forecast and runs the scoring engine for each hour.
+    Results cached 30 minutes per date.
+    """
+    # Validate date
+    try:
+        req_date = datetime.date.fromisoformat(date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date — use YYYY-MM-DD")
+
+    today      = datetime.date.today()
+    days_ahead = (req_date - today).days
+    if days_ahead < 0:
+        raise HTTPException(status_code=400, detail="Cannot forecast past dates")
+    if days_ahead > 6:
+        raise HTTPException(status_code=400, detail="Forecast only available up to 7 days ahead")
+
+    # Check cache
+    now    = datetime.datetime.now()
+    cached = _forecast_cache.get(date)
+    if cached and now < cached["expires"]:
+        return cached["data"]
+
+    # Prune stale entries (dates more than 2 days old)
+    cutoff = (today - datetime.timedelta(days=2)).isoformat()
+    for k in list(_forecast_cache.keys()):
+        if k < cutoff:
+            del _forecast_cache[k]
+
+    # Fetch data sources
+    buoy         = get_buoy_conditions(LAKE_CENTER_LAT, LAKE_CENTER_LON)
+    water_temp_f = buoy.get("water_temp_f")
+    hourly_wx    = get_open_meteo_hourly(LAKE_CENTER_LAT, LAKE_CENTER_LON, date)
+    spots        = _load_spots()
+
+    hours_output = []
+    for h_idx, hw in enumerate(hourly_wx):
+        hour_dt = datetime.datetime(req_date.year, req_date.month, req_date.day, hour=h_idx)
+
+        conditions = {
+            "water_temp_f":    water_temp_f,
+            "pressure_hpa":    hw["pressure_hpa"],
+            "pressure_trend":  hw["pressure_trend"],
+            "wind_speed_mph":  hw["wind_speed_mph"],
+            "wind_dir_label":  hw["wind_dir_label"],
+            "cloud_cover_pct": hw["cloud_cover_pct"],
+            "conditions":      hw["conditions"],
+            "temp_f":          hw["temp_f"],
+        }
+
+        ranked = rank_spots(spots, conditions, hour_dt)
+
+        compact_spots = [
+            {
+                "rank":      i + 1,
+                "spot_id":   s["spot_id"],
+                "spot_name": s["spot_name"],
+                "score":     s["score"],
+                "rating":    s["rating"],
+                "breakdown": s["breakdown"],
+            }
+            for i, s in enumerate(ranked)
+        ]
+
+        top = compact_spots[0] if compact_spots else {}
+        hours_output.append({
+            "hour":          h_idx,
+            "top_score":     top.get("score", 0),
+            "top_spot_name": top.get("spot_name", ""),
+            "conditions": {
+                "temp_f":              hw["temp_f"],
+                "cloud_cover_pct":     hw["cloud_cover_pct"],
+                "conditions":          hw["conditions"],
+                "pressure_hpa":        hw["pressure_hpa"],
+                "pressure_trend":      hw["pressure_trend"],
+                "pressure_rate_mb_hr": hw["pressure_rate_mb_hr"],
+                "wind_speed_mph":      hw["wind_speed_mph"],
+                "wind_gust_mph":       hw["wind_gust_mph"],
+                "wind_dir_label":      hw["wind_dir_label"],
+                "precipitation":       hw["precipitation"],
+            },
+            "spots": compact_spots,
+        })
+
+    best = max(hours_output, key=lambda h: h["top_score"])
+
+    result = {
+        "date":           date,
+        "fetched_at":     now.isoformat(),
+        "water_temp_f":   water_temp_f,
+        "buoy_name":      buoy.get("buoy_name"),
+        "best_hour":      best["hour"],
+        "best_score":     best["top_score"],
+        "best_spot_name": best["top_spot_name"],
+        "hours":          hours_output,
+    }
+
+    _forecast_cache[date] = {"data": result, "expires": now + datetime.timedelta(seconds=FORECAST_CACHE_TTL)}
+    return result
 
 
 @app.get("/api/health")
