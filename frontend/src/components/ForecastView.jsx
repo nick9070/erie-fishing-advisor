@@ -34,6 +34,148 @@ function getDayLabels(dateStr) {
 const TREND_ICON  = { rising_fast: '↑↑', rising: '↑', stable: '→', falling: '↓', falling_fast: '↓↓' }
 const TREND_COLOR = { rising_fast: '#f87171', rising: '#fb923c', stable: '#4ade80', falling: '#facc15', falling_fast: '#f87171' }
 
+function getScoreBarColor(score) { return getScoreColor(score) }
+
+function ScoreBar({ score }) {
+  return (
+    <div style={{ height: 4, background: '#1e3a4a', borderRadius: 2, overflow: 'hidden', marginTop: 5 }}>
+      <div style={{ width: `${score}%`, height: '100%', background: getScoreColor(score), borderRadius: 2 }} />
+    </div>
+  )
+}
+
+function FactorPill({ label, value }) {
+  const color = value >= 70 ? '#4ade80' : value >= 50 ? '#facc15' : '#f87171'
+  return (
+    <div style={{ background: '#0a1f2e', border: '1px solid #1e3a4a', borderRadius: 6, padding: '6px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+      <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</span>
+      <span style={{ fontSize: 16, fontWeight: 700, color }}>{value}</span>
+    </div>
+  )
+}
+
+function ForecastSpotRow({ spot }) {
+  const [expanded, setExpanded] = useState(false)
+  const color  = getScoreColor(spot.score)
+  const bd     = spot.breakdown
+  const sol    = spot.solunar
+  const depth  = spot.depth_info
+  const shallow = spot.shallow_bite
+
+  return (
+    <div
+      style={{
+        borderLeft: `3px solid ${color}`,
+        borderBottom: '1px solid #142030',
+        background: expanded ? '#0f2d42' : 'transparent',
+        cursor: 'pointer',
+      }}
+      onClick={() => setExpanded(e => !e)}
+    >
+      {/* Top row */}
+      <div style={{ display: 'flex', alignItems: 'center', padding: '10px 16px', gap: 12 }}>
+        <span style={{ fontSize: 18, fontWeight: 800, width: 22, textAlign: 'center', flexShrink: 0, color }}>{spot.rank}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {spot.spot_name}
+          </div>
+          <ScoreBar score={spot.score} />
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', flexShrink: 0 }}>
+          <span style={{ fontSize: 20, fontWeight: 800, color, lineHeight: 1 }}>{spot.score}</span>
+          <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', color, marginTop: 2 }}>{spot.rating}</span>
+        </div>
+        <span style={{ color: '#475569', fontSize: 12, flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
+      </div>
+
+      {/* Expanded detail */}
+      {expanded && (
+        <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid #1e3a4a' }}>
+
+          {/* Depth badge */}
+          {depth?.target_depth_ft && (
+            <div style={{ marginTop: 10, fontSize: 11, color: depth.mode === 'shallow_bite' ? '#fde68a' : '#94a3b8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {depth.mode === 'shallow_bite' ? '🌅' : '🎯'}
+              {' '}Target {depth.target_depth_ft[0]}–{depth.target_depth_ft[1]} ft
+              {depth.mode === 'shallow_bite' && (
+                <span style={{ background: 'rgba(250,204,21,0.12)', color: '#fde68a', border: '1px solid rgba(250,204,21,0.3)', fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 10, textTransform: 'uppercase' }}>
+                  SHALLOW BITE
+                </span>
+              )}
+              {depth.also_check_ft && (
+                <span style={{ fontSize: 10, color: '#64748b', fontStyle: 'italic' }}>
+                  also {depth.also_check_ft[0]}–{depth.also_check_ft[1]}ft mid-day
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Solunar badge */}
+          {sol?.active_period && sol.active_period !== 'inactive' && (
+            <div style={{ fontSize: 11, color: '#facc15', background: 'rgba(250,204,21,0.08)', border: '1px solid rgba(250,204,21,0.2)', borderRadius: 4, padding: '3px 8px', display: 'inline-block' }}>
+              ★ Solunar {sol.active_period}{sol.moon_phase_pct != null ? ` — Moon ${sol.moon_phase_pct}%` : ''}
+            </div>
+          )}
+
+          {/* Techniques */}
+          {spot.techniques?.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px', marginRight: 4 }}>Techniques</span>
+              {spot.techniques.map(t => (
+                <span key={t} style={{ background: '#0c2a3e', border: '1px solid #1e5a7a', color: '#7dd3fc', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>{t}</span>
+              ))}
+            </div>
+          )}
+
+          {/* Forage */}
+          {spot.forage && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Primary forage</span>
+              <span style={{ fontSize: 12, color: '#94a3b8' }}>{spot.forage.replace('_', ' ')}</span>
+            </div>
+          )}
+
+          {/* Factor breakdown */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+            <FactorPill label="Water Temp" value={bd.water_temp} />
+            <FactorPill label="Pressure"   value={bd.pressure} />
+            <FactorPill label="Wind"       value={bd.wind} />
+            <FactorPill label="Solunar"    value={bd.solunar} />
+            <FactorPill label="Monthly"    value={bd.monthly_qual} />
+            <FactorPill label="Time"       value={bd.time_of_day} />
+          </div>
+
+          {/* Bonuses */}
+          {spot.bonuses && (spot.bonuses.front_penalty !== 0 || spot.bonuses.catch_log !== 0 || spot.bonuses.odnr_seasonal !== 0) && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {spot.bonuses.front_penalty !== 0 && (
+                <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 10, fontWeight: 600, background: 'rgba(248,113,113,0.1)', color: '#f87171', border: '1px solid rgba(248,113,113,0.2)' }}>
+                  🌬 Post-front {spot.bonuses.front_penalty}
+                </span>
+              )}
+              {spot.bonuses.catch_log !== 0 && (
+                <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 10, fontWeight: 600, background: spot.bonuses.catch_log > 0 ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', color: spot.bonuses.catch_log > 0 ? '#4ade80' : '#f87171', border: `1px solid ${spot.bonuses.catch_log > 0 ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}` }}>
+                  📔 Catch log {spot.bonuses.catch_log > 0 ? '+' : ''}{spot.bonuses.catch_log}
+                </span>
+              )}
+              {spot.bonuses.odnr_seasonal !== 0 && (
+                <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 10, fontWeight: 600, background: spot.bonuses.odnr_seasonal > 0 ? 'rgba(74,222,128,0.1)' : 'rgba(248,113,113,0.1)', color: spot.bonuses.odnr_seasonal > 0 ? '#4ade80' : '#f87171', border: `1px solid ${spot.bonuses.odnr_seasonal > 0 ? 'rgba(74,222,128,0.2)' : 'rgba(248,113,113,0.2)'}` }}>
+                  📊 ODNR {spot.bonuses.odnr_seasonal > 0 ? '+' : ''}{spot.bonuses.odnr_seasonal}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Notes */}
+          {spot.notes && (
+            <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>📍 {spot.notes}</div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ForecastView({ apiBase }) {
   const [selectedDate, setSelectedDate] = useState(() => getDateStr(0))
   const [forecast,     setForecast]     = useState(null)
@@ -186,15 +328,10 @@ export default function ForecastView({ apiBase }) {
 
               {/* Spot rankings */}
               <div style={S.spotListHeader}>
-                SPOT RANKINGS — {formatHour(selectedHour).toUpperCase()}
+                SPOT RANKINGS — {formatHour(selectedHour).toUpperCase()} · tap to expand
               </div>
               {hourObj.spots.map(spot => (
-                <div key={spot.spot_id} style={{ ...S.spotRow, borderLeft: `3px solid ${getScoreColor(spot.score)}` }}>
-                  <span style={{ ...S.rank, color: getScoreColor(spot.score) }}>{spot.rank}</span>
-                  <span style={S.spotName}>{spot.spot_name}</span>
-                  <span style={{ ...S.score, color: getScoreColor(spot.score) }}>{spot.score}</span>
-                  <span style={{ ...S.rating, color: getScoreColor(spot.score) }}>{spot.rating}</span>
-                </div>
+                <ForecastSpotRow key={spot.spot_id} spot={spot} />
               ))}
 
             </div>
@@ -271,15 +408,4 @@ const S = {
     borderBottom: '1px solid #142030', background: '#0d1f2d',
     position: 'sticky', top: 0,
   },
-  spotRow: {
-    display: 'flex', alignItems: 'center', padding: '10px 16px',
-    borderBottom: '1px solid #142030', gap: 12,
-  },
-  rank: { fontSize: 18, fontWeight: 800, width: 22, textAlign: 'center', flexShrink: 0 },
-  spotName: {
-    flex: 1, fontSize: 13, fontWeight: 600, color: '#e2e8f0',
-    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-  },
-  score:  { fontSize: 20, fontWeight: 800, flexShrink: 0 },
-  rating: { fontSize: 9, fontWeight: 700, letterSpacing: '0.5px', textTransform: 'uppercase', flexShrink: 0, width: 54, textAlign: 'right' },
 }

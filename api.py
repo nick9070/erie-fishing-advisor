@@ -414,12 +414,19 @@ def get_forecast(date: str):
 
         compact_spots = [
             {
-                "rank":      i + 1,
-                "spot_id":   s["spot_id"],
-                "spot_name": s["spot_name"],
-                "score":     s["score"],
-                "rating":    s["rating"],
-                "breakdown": s["breakdown"],
+                "rank":        i + 1,
+                "spot_id":     s["spot_id"],
+                "spot_name":   s["spot_name"],
+                "score":       s["score"],
+                "rating":      s["rating"],
+                "breakdown":   s["breakdown"],
+                "bonuses":     s["bonuses"],
+                "depth_info":  s["depth_info"],
+                "shallow_bite": s["shallow_bite"],
+                "solunar":     s["solunar"],
+                "techniques":  s["techniques"],
+                "forage":      s["forage"],
+                "notes":       s["notes"],
             }
             for i, s in enumerate(ranked)
         ]
