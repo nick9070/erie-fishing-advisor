@@ -2,7 +2,7 @@
   {
     "id": "long_point_tip",
     "name": "Long Point Tip",
-    "coords": { "lat": 42.353, "lon": -80.261 },
+    "coords": { "lat": 42.548, "lon": -80.435 },
     "depth_range": [8, 28],
     "structure": "rocky_shoal",
     "best_seasons": ["pre_spawn", "spawn", "summer", "fall"],
@@ -53,7 +53,7 @@
   {
     "id": "port_ryerse_normandale",
     "name": "Port Ryerse / Normandale Offshore",
-    "coords": { "lat": 42.728, "lon": -80.368 },
+    "coords": { "lat": 42.665, "lon": -80.378 },
     "depth_range": [15, 38],
     "structure": "rocky_reef",
     "best_seasons": ["post_spawn", "summer", "fall"],
@@ -70,7 +70,7 @@
   {
     "id": "turkey_point",
     "name": "Turkey Point Reef",
-    "coords": { "lat": 42.699, "lon": -80.502 },
+    "coords": { "lat": 42.635, "lon": -80.510 },
     "depth_range": [6, 25],
     "structure": "rocky_shoal",
     "best_seasons": ["pre_spawn", "spawn", "summer", "fall"],
@@ -172,7 +172,7 @@
   {
     "id": "sherkston_shoals",
     "name": "Sherkston Shoals",
-    "coords": { "lat": 42.878, "lon": -79.113 },
+    "coords": { "lat": 42.818, "lon": -79.115 },
     "depth_range": [6, 22],
     "structure": "rocky_shoal",
     "best_seasons": ["spawn", "post_spawn", "summer", "fall"],
@@ -206,7 +206,7 @@
   {
     "id": "waverly_shoal",
     "name": "Waverly Shoal (Fort Erie)",
-    "coords": { "lat": 42.874, "lon": -79.081 },
+    "coords": { "lat": 42.828, "lon": -79.080 },
     "depth_range": [8, 32],
     "structure": "rocky_reef",
     "best_seasons": ["summer", "fall"],
