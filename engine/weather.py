@@ -204,14 +204,23 @@ def score_cloud_cover(cloud_pct: float) -> int:
         return 35   # bluebird — fish deep, tight bite windows
 
 
-def score_wind(speed_mph: float, wind_dir: str, spot_best_winds: list) -> int:
+def score_wind(speed_mph: float, wind_dir: str, spot_best_winds: list,
+               wind_fetch: str = "medium") -> int:
     """
-    Score wind for bass fishing.
+    Score wind for bass fishing, adjusted for each spot's fetch distance.
 
     Research (High Percentage Fishing database, 40k+ catches):
     Winds >15 mph correlated with >2x normal catch rates due to forage
     concentration on windward structure. Reward moderate-strong wind;
     only penalize when too rough for safe boat operation (>25 mph).
+
+    wind_fetch values:
+      'high'   — open-lake exposure; strong directional forage concentration effect
+      'medium' — moderate fetch (default); standard wind scoring
+      'low'    — sheltered bay/harbour; wind concentrates forage much less,
+                 but also protected from rough conditions
+      'river'  — current-dominated; wind direction is largely irrelevant,
+                 current is the forage-concentration mechanism
     """
     if speed_mph is None:
         speed_mph = 8
@@ -227,8 +236,27 @@ def score_wind(speed_mph: float, wind_dir: str, spot_best_winds: list) -> int:
     else:
         speed_score = 10   # >25 mph — too rough to fish effectively
 
+    # River spots: current drives forage concentration, not wind direction
+    if wind_fetch == "river":
+        # Moderate wind = slight benefit (surface chop); heavy wind = worse
+        if speed_mph <= 20:
+            return round(speed_score * 0.85 + 12)
+        return round(speed_score * 0.7)
+
     # Direction bonus — does wind push water onto this spot's structure?
-    dir_score = 80 if wind_dir in spot_best_winds else 40
+    dir_match = wind_dir in spot_best_winds
+
+    if wind_fetch == "high":
+        # Long fetch amplifies forage concentration when direction is right;
+        # wrong direction on an exposed spot = rough with no benefit
+        dir_score = 90 if dir_match else 30
+    elif wind_fetch == "low":
+        # Sheltered spots: matching wind still helps but less dramatically;
+        # wrong-direction wind is blocked so condition stays fishable
+        dir_score = 65 if dir_match else 55
+    else:  # "medium" — standard
+        dir_score = 80 if dir_match else 40
+
     return round((speed_score * 0.6) + (dir_score * 0.4))
 
 
@@ -277,3 +305,68 @@ def get_shallow_bite_status(cloud_pct: float, hour: int, month: int) -> dict:
             "reason": "Clear sky mid-day — fish deeper structure",
             "target_depth_modifier": 0,
         }
+
+
+def get_past_wind(lat: float, lon: float, hours: int = 24) -> list:
+    """
+    Fetch the past N hours of hourly wind direction and speed from Open-Meteo.
+    Uses past_days=2 to ensure enough history is available.
+    Returns a list of {dir_deg, dir_label, speed_mph} dicts (newest last).
+    """
+    try:
+        params = {
+            "latitude":        lat,
+            "longitude":       lon,
+            "hourly":          "wind_direction_10m,wind_speed_10m",
+            "wind_speed_unit": "mph",
+            "timezone":        "America/Toronto",
+            "past_days":       2,
+            "forecast_days":   0,
+        }
+        resp = requests.get(OPEN_METEO_BASE, params=params, timeout=10)
+        resp.raise_for_status()
+        data   = resp.json()["hourly"]
+        dirs   = data["wind_direction_10m"]
+        speeds = data["wind_speed_10m"]
+        result = [
+            {"dir_deg": d, "dir_label": _deg_to_compass(d), "speed_mph": s}
+            for d, s in zip(dirs, speeds)
+        ]
+        return result[-hours:]   # most recent N hours
+    except Exception:
+        return []
+
+
+def score_wind_persistence(wind_history: list, spot_best_winds: list) -> dict:
+    """
+    Score the wind persistence bonus for a spot.
+
+    Research (High Percentage Fishing; Brownscombe 2024):
+    Forage concentration on windward structure builds over hours of consistent
+    wind, not minutes. 18-24h of favorable wind creates a stacked baitfish
+    situation that holds even after the wind briefly shifts.
+
+    Returns:
+      bonus:          int    — added to spot score (0-10)
+      label:          str
+      favorable_pct:  float  — 0.0-1.0
+    """
+    if not wind_history:
+        return {"bonus": 0, "label": "no history", "favorable_pct": 0.0}
+
+    # Only count hours where wind was meaningful (>5 mph)
+    meaningful = [h for h in wind_history if h.get("speed_mph") and h["speed_mph"] > 5]
+    if len(meaningful) < 6:
+        return {"bonus": 0, "label": "calm/variable", "favorable_pct": 0.0}
+
+    favorable     = sum(1 for h in meaningful if h["dir_label"] in spot_best_winds)
+    favorable_pct = favorable / len(meaningful)
+
+    if favorable_pct >= 0.75:
+        return {"bonus": 10, "label": "persistent favorable wind (24h)", "favorable_pct": round(favorable_pct, 2)}
+    elif favorable_pct >= 0.50:
+        return {"bonus": 5,  "label": "mostly favorable wind",           "favorable_pct": round(favorable_pct, 2)}
+    elif favorable_pct >= 0.25:
+        return {"bonus": 1,  "label": "variable wind",                   "favorable_pct": round(favorable_pct, 2)}
+    else:
+        return {"bonus": 0,  "label": "unfavorable wind trend",          "favorable_pct": round(favorable_pct, 2)}

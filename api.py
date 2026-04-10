@@ -32,6 +32,9 @@ from engine.scoring import rank_spots
 from engine.catch_log import init_db, log_catch, get_catches, get_spot_stats
 from engine.spawn import get_spawn_phase
 from engine.thermocline import get_thermocline
+from engine.clarity import get_kd490
+from engine.weather import get_past_wind
+from engine.temp_history import record_temp
 
 init_db()
 
@@ -161,11 +164,22 @@ def _fetch_conditions() -> dict:
     water_temp_f = buoy.get("water_temp_f")
     now_month    = datetime.datetime.now().month
 
-    # Thermocline (GLSEA satellite SST + empirical model — no new dependencies)
+    # Record temp reading and compute multi-day trend
+    record_temp(water_temp_f)
+    from engine.temp_history import get_temp_trend
+    temp_trend_data = get_temp_trend()
+
+    # Thermocline (LEOFS depth profile → real dT/dz gradient; falls back to GLSEA empirical)
     thermo = get_thermocline(water_temp_f, now_month, LAKE_CENTER_LAT, LAKE_CENTER_LON)
 
     # Spawn phase (temperature + month driven)
     spawn = get_spawn_phase(water_temp_f, now_month)
+
+    # Water clarity (VIIRS KD490 monthly average — cached 24h)
+    clarity = get_kd490(LAKE_CENTER_LAT, LAKE_CENTER_LON)
+
+    # Past 24h wind history for persistence scoring (per-spot in scoring engine)
+    wind_history = get_past_wind(LAKE_CENTER_LAT, LAKE_CENTER_LON, hours=24)
 
     data = {
         # Water (buoy only)
@@ -197,6 +211,16 @@ def _fetch_conditions() -> dict:
         "spawn_label":       spawn["label"],
         "spawn_cr_warning":  spawn["cr_warning"],
         "spawn_depth_note":  spawn["depth_note"],
+        # Water clarity
+        "clarity_kd490":           clarity["kd490"],
+        "clarity_label":           clarity["clarity_label"],
+        "clarity_depth_offset_ft": clarity["depth_offset_ft"],
+        "clarity_technique_note":  clarity["technique_note"],
+        # Wind history for persistence scoring (passed to scoring engine)
+        "wind_history":            wind_history,
+        # Temperature trend
+        "temp_trend_label":        temp_trend_data["label"],
+        "temp_trend_delta_f":      temp_trend_data["delta_7day_f"],
     }
 
     _cache = {
@@ -264,6 +288,12 @@ def get_spots():
             "spawn_label":            conditions.get("spawn_label"),
             "spawn_cr_warning":       conditions.get("spawn_cr_warning"),
             "spawn_depth_note":       conditions.get("spawn_depth_note"),
+            "clarity_kd490":           conditions.get("clarity_kd490"),
+            "clarity_label":           conditions.get("clarity_label"),
+            "clarity_depth_offset_ft": conditions.get("clarity_depth_offset_ft"),
+            "clarity_technique_note":  conditions.get("clarity_technique_note"),
+            "temp_trend_label":        conditions.get("temp_trend_label"),
+            "temp_trend_delta_f":      conditions.get("temp_trend_delta_f"),
         },
         "spots": ranked,
     }
@@ -422,6 +452,7 @@ def get_forecast(date: str):
     water_temp_f = buoy.get("water_temp_f")
     hourly_wx    = get_open_meteo_hourly(LAKE_CENTER_LAT, LAKE_CENTER_LON, date)
     spots        = _load_spots()
+    wind_history = get_past_wind(LAKE_CENTER_LAT, LAKE_CENTER_LON, hours=24)
 
     hours_output = []
     for h_idx, hw in enumerate(hourly_wx):
@@ -436,6 +467,7 @@ def get_forecast(date: str):
             "cloud_cover_pct": hw["cloud_cover_pct"],
             "conditions":      hw["conditions"],
             "temp_f":          hw["temp_f"],
+            "wind_history":    wind_history,
         }
 
         ranked = rank_spots(spots, conditions, hour_dt)

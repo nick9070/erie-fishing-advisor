@@ -2,14 +2,14 @@
 Core scoring engine — combines all factors into a per-spot score (0-100).
 
 Weights (must sum to 1.0):
-  water_temp    0.27  — most critical biological driver (Brownscombe 2024: peak 17-24°C)
-  pressure      0.20  — barometric pressure + rate of change (Manns obs. data; Lang 2023)
-  wind          0.13  — speed + direction vs spot (>2x catch rate at 10-20 mph)
-  solunar       0.06  — lunar feeding periods (Stuart 2023: tables don't predict CPUE)
-  monthly_qual  0.18  — spot-specific monthly quality (research-backed, May-Nov focused)
-  time_of_day   0.08  — dawn/dusk bonus (Suski & Ridgway 2009: fish <2m at dawn)
-  cloud_cover   0.05  — overcast extends shallow bite window
-  gbif_density  0.03  — historical occurrence signal
+  water_temp      0.27  — most critical biological driver (Brownscombe 2024: peak 17-24°C)
+  pressure        0.20  — barometric pressure + rate of change (Manns obs. data; Lang 2023)
+  wind            0.13  — speed + direction vs spot (>2x catch rate at 10-20 mph)
+  solunar         0.06  — lunar feeding periods (Stuart 2023: tables don't predict CPUE)
+  monthly_qual    0.18  — spot-specific monthly quality (research-backed, May-Nov focused)
+  time_of_day     0.08  — dawn/dusk bonus (Suski & Ridgway 2009: fish <2m at dawn)
+  cloud_cover     0.05  — overcast extends shallow bite window
+  habitat_quality 0.03  — rocky/gravel structure quality, goby habitat suitability (0-100)
 
 Post-score modifiers (applied after weighted sum, clamped 0-100):
   post_front:      -15 to -5   — cold front suppression (Lang 2023; Brandt 1987)
@@ -28,16 +28,17 @@ import json
 import datetime
 from pathlib import Path
 
-from engine.weather import score_pressure, score_wind, score_cloud_cover, get_shallow_bite_status
+from engine.weather import score_pressure, score_wind, score_cloud_cover, get_shallow_bite_status, score_wind_persistence
 from engine.water_temp import score_water_temp, get_season
 from engine.solunar import get_solunar_score
 from engine.spawn import get_spawn_phase
+from engine.thermocline import get_surface_current
 
 try:
-    from engine.gbif import get_nearby_gbif_density
-    GBIF_AVAILABLE = True
+    from engine.temp_history import get_temp_trend
+    TEMP_HISTORY_AVAILABLE = True
 except Exception:
-    GBIF_AVAILABLE = False
+    TEMP_HISTORY_AVAILABLE = False
 
 try:
     from engine.catch_log import get_catch_bonus, init_db
@@ -59,14 +60,14 @@ def _get_odnr() -> dict:
 
 
 WEIGHTS = {
-    "water_temp":   0.27,   # up from 0.24 — strongest biological signal
-    "pressure":     0.20,   # up from 0.17 — rate-of-change now tracked properly
-    "wind":         0.13,
-    "solunar":      0.06,   # down from 0.12 — Stuart (2023): tables don't predict CPUE
-    "monthly_qual": 0.18,
-    "time_of_day":  0.08,
-    "cloud_cover":  0.05,
-    "gbif_density": 0.03,
+    "water_temp":      0.27,   # up from 0.24 — strongest biological signal
+    "pressure":        0.20,   # up from 0.17 — rate-of-change now tracked properly
+    "wind":            0.13,
+    "solunar":         0.06,   # down from 0.12 — Stuart (2023): tables don't predict CPUE
+    "monthly_qual":    0.18,
+    "time_of_day":     0.08,
+    "cloud_cover":     0.05,
+    "habitat_quality": 0.03,   # replaces GBIF density — actual structure quality per spot
 }
 
 
@@ -122,28 +123,24 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
                                       conditions.get("pressure_trend", "stable"))
     wind_score       = score_wind(conditions.get("wind_speed_mph", 10),
                                   conditions.get("wind_dir_label", "W"),
-                                  spot.get("best_wind_dirs", []))
+                                  spot.get("best_wind_dirs", []),
+                                  spot.get("wind_fetch", "medium"))
     solunar_data     = get_solunar_score(spot["coords"]["lat"], spot["coords"]["lon"], now)
     solunar_score    = solunar_data["score"]
     monthly_score    = spot.get("monthly_quality", {}).get(str(month), 50)
     time_score       = _score_time_of_day(hour)
     cloud_score      = score_cloud_cover(cloud_pct)
-
-    if GBIF_AVAILABLE:
-        density    = get_nearby_gbif_density(spot["coords"]["lat"], spot["coords"]["lon"], month)
-        gbif_score = min(100, 40 + density * 5)
-    else:
-        gbif_score = 50
+    habitat_score    = spot.get("habitat_quality", 50)
 
     breakdown = {
-        "water_temp":   water_temp_score,
-        "pressure":     pressure_score,
-        "wind":         wind_score,
-        "solunar":      solunar_score,
-        "monthly_qual": monthly_score,
-        "time_of_day":  time_score,
-        "cloud_cover":  cloud_score,
-        "gbif_density": gbif_score,
+        "water_temp":      water_temp_score,
+        "pressure":        pressure_score,
+        "wind":            wind_score,
+        "solunar":         solunar_score,
+        "monthly_qual":    monthly_score,
+        "time_of_day":     time_score,
+        "cloud_cover":     cloud_score,
+        "habitat_quality": habitat_score,
     }
 
     total = sum(breakdown[k] * WEIGHTS[k] for k in WEIGHTS)
@@ -177,16 +174,34 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
         raw = odnr.get("lake_wide_monthly_modifier", {}).get(str(month), 0)
         odnr_modifier = round(raw * 0.4)
 
+    # Temperature trend (multi-day warming/cooling)
+    temp_trend = get_temp_trend() if TEMP_HISTORY_AVAILABLE else {"modifier": 0, "label": "unknown", "delta_7day_f": None}
+    temp_trend_modifier = temp_trend["modifier"]
+
+    # Wind persistence (24h of consistent favorable wind = forage stacked on structure)
+    wind_history = conditions.get("wind_history", [])
+    wind_persist = score_wind_persistence(wind_history, spot.get("best_wind_dirs", []))
+    wind_persist_bonus = wind_persist["bonus"]
+
+    # LEOFS surface current (per-spot, using nearest station from cached LEOFS data)
+    current = get_surface_current(spot["coords"]["lat"], spot["coords"]["lon"])
+    current_bonus = current["bonus"]
+    # River/fetch-sensitive spots get amplified current bonus
+    if spot.get("wind_fetch") == "river":
+        current_bonus = min(12, round(current_bonus * 1.5))
+
     total = max(0, min(100, round(
-        total + front_penalty + spawn_penalty + goby_bonus + catch_bonus + odnr_modifier
+        total + front_penalty + spawn_penalty + goby_bonus + catch_bonus
+        + odnr_modifier + temp_trend_modifier + wind_persist_bonus + current_bonus
     )))
 
     # --- Shallow bite window ---
     shallow_bite = get_shallow_bite_status(cloud_pct, hour, month)
 
-    # Thermocline depth (passed through conditions from api.py)
-    thermocline_ft = conditions.get("thermocline_depth_ft")
-    recommended_depth = _get_depth_info(spot, season, shallow_bite, thermocline_ft)
+    # Thermocline depth and water clarity (passed through from api.py)
+    thermocline_ft  = conditions.get("thermocline_depth_ft")
+    clarity_offset  = conditions.get("clarity_depth_offset_ft", 0) or 0
+    recommended_depth = _get_depth_info(spot, season, shallow_bite, thermocline_ft, clarity_offset)
 
     # Techniques from ODNR data
     techniques = odnr.get("presentation_by_season", {}).get(season, []) if odnr else []
@@ -198,11 +213,14 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
         "rating":       _rating_label(total),
         "breakdown":    breakdown,
         "bonuses": {
-            "catch_log":     catch_bonus,
-            "odnr_seasonal": odnr_modifier,
-            "front_penalty": front_penalty,
-            "spawn_penalty": spawn_penalty,
-            "goby_bonus":    goby_bonus,
+            "catch_log":        catch_bonus,
+            "odnr_seasonal":    odnr_modifier,
+            "front_penalty":    front_penalty,
+            "spawn_penalty":    spawn_penalty,
+            "goby_bonus":       goby_bonus,
+            "temp_trend":       temp_trend_modifier,
+            "wind_persistence": wind_persist_bonus,
+            "current":          current_bonus,
         },
         "spawn":        spawn_data,
         "season":       season,
@@ -222,7 +240,9 @@ def rank_spots(spots: list, conditions: dict, now: datetime.datetime) -> list:
     return sorted(scored, key=lambda x: x["score"], reverse=True)
 
 
-def _get_depth_info(spot: dict, season: str, shallow_bite: dict, thermocline_ft: float | None = None) -> dict:
+def _get_depth_info(spot: dict, season: str, shallow_bite: dict,
+                    thermocline_ft: float | None = None,
+                    clarity_offset: int = 0) -> dict:
     """
     Return recommended fishing depth, adjusted for shallow bite window and thermocline.
 
@@ -276,6 +296,18 @@ def _get_depth_info(spot: dict, season: str, shallow_bite: dict, thermocline_ft:
             "mode":             "thermocline",
             "thermocline_ft":   thermocline_ft,
             "season":           season,
+        }
+
+    # Apply water clarity offset in standard (non-shallow-bite, non-thermocline) mode.
+    # Clear water → fish go deeper midday; turbid water → fish stay shallower.
+    if clarity_offset != 0:
+        adj = [round(d + clarity_offset) for d in standard_depth]
+        adj = [max(4, d) for d in adj]   # floor at 4ft
+        return {
+            "target_depth_ft": adj,
+            "mode":            "clarity_adjusted",
+            "clarity_offset":  clarity_offset,
+            "season":          season,
         }
 
     return {

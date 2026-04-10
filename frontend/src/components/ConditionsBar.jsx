@@ -2,6 +2,18 @@ const TREND_ICON  = { rising_fast: '↑↑', rising: '↑', stable: '→', falli
 const TREND_COLOR = { rising_fast: '#f87171', rising: '#fb923c', stable: '#4ade80', falling: '#facc15', falling_fast: '#f87171' }
 const TREND_LABEL = { rising_fast: 'rising fast', rising: 'rising', stable: 'stable', falling: 'falling', falling_fast: 'falling fast' }
 
+const SPAWN_COLOR = {
+  winter:               '#64748b',
+  pre_spawn_early:      '#38bdf8',
+  pre_spawn:            '#4ade80',
+  spawn:                '#facc15',
+  post_spawn_guard:     '#f97316',
+  post_spawn_recovery:  '#fb923c',
+  active:               '#4ade80',
+  fall:                 '#f97316',
+  fall_transition:      '#f97316',
+}
+
 export default function ConditionsBar({ conditions, season }) {
   const {
     water_temp_f,
@@ -14,6 +26,15 @@ export default function ConditionsBar({ conditions, season }) {
     cloud_cover_pct,
     conditions: sky,
     buoy_name,
+    thermocline_depth_ft,
+    thermocline_stratified,
+    thermocline_note,
+    spawn_phase,
+    spawn_label,
+    clarity_label,
+    clarity_kd490,
+    temp_trend_label,
+    temp_trend_delta_f,
   } = conditions
 
   const trendIcon  = TREND_ICON[pressure_trend]  ?? '→'
@@ -69,11 +90,51 @@ export default function ConditionsBar({ conditions, season }) {
             color={getSkyColor(cloud_cover_pct)}
           />
         )}
+        {spawn_label && (
+          <Stat
+            label="Spawn Phase"
+            value={spawn_label}
+            icon="🐟"
+            color={SPAWN_COLOR[spawn_phase] ?? '#94a3b8'}
+          />
+        )}
+        {thermocline_stratified && thermocline_depth_ft && (
+          <Stat
+            label="Thermocline"
+            value={`${thermocline_depth_ft}ft`}
+            icon="🌊"
+            color="#38bdf8"
+            suffix={<span style={{ color: '#64748b', fontSize: 11 }}>target above</span>}
+          />
+        )}
+        {clarity_label && clarity_label !== 'unknown' && (
+          <Stat
+            label="Clarity"
+            value={clarity_label}
+            icon="👁"
+            color={getClarityColor(clarity_label)}
+            suffix={clarity_kd490 != null
+              ? <span style={{ color: '#64748b', fontSize: 11 }}>Kd490 {clarity_kd490.toFixed(2)}</span>
+              : null}
+          />
+        )}
+        {temp_trend_label && temp_trend_label !== 'insufficient data' && temp_trend_label !== 'unknown' && (
+          <Stat
+            label="7-Day Trend"
+            value={temp_trend_label}
+            icon="📈"
+            color={getTrendColor(temp_trend_label)}
+            suffix={temp_trend_delta_f != null
+              ? <span style={{ color: '#64748b', fontSize: 11 }}>{temp_trend_delta_f > 0 ? '+' : ''}{temp_trend_delta_f}°F</span>
+              : null}
+          />
+        )}
       </div>
 
       {buoy_name && (
         <div className="data-source-bar">
           📡 On-lake data: NOAA NDBC {buoy_name} · Sky: Open-Meteo (ECMWF)
+          {thermocline_stratified && thermocline_note ? ` · ${thermocline_note}` : ''}
         </div>
       )}
 
@@ -159,6 +220,24 @@ function getSkyColor(pct) {
   if (pct >= 70) return '#4ade80'   // overcast = good
   if (pct >= 40) return '#facc15'   // partly cloudy = decent
   return '#94a3b8'                  // clear = neutral (not bad, just different)
+}
+
+function getTrendColor(label) {
+  if (!label) return '#94a3b8'
+  if (label.includes('warming fast')) return '#4ade80'
+  if (label.includes('warming'))      return '#86efac'
+  if (label.includes('stable'))       return '#94a3b8'
+  if (label.includes('cooling fast')) return '#f87171'
+  if (label.includes('cooling'))      return '#fca5a5'
+  return '#94a3b8'
+}
+
+function getClarityColor(label) {
+  if (label === 'crystal clear') return '#facc15'  // fish spooky — caution yellow
+  if (label === 'clear')         return '#4ade80'  // eastern basin ideal
+  if (label === 'moderate')      return '#4ade80'  // decent
+  if (label === 'turbid')        return '#fb923c'  // murky — notable
+  return '#94a3b8'
 }
 
 const styles = `

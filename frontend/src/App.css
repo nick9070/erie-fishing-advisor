@@ -124,6 +124,16 @@ body {
   line-height: 1.5;
 }
 
+.cr-warning-banner {
+  background: #1a0a00;
+  color: #fdba74;
+  padding: 8px 20px;
+  font-size: 12px;
+  border-bottom: 1px solid #9a3412;
+  flex-shrink: 0;
+  line-height: 1.5;
+}
+
 .error-banner {
   background: #450a0a;
   color: #fca5a5;

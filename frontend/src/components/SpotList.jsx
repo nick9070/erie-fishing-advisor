@@ -130,18 +130,21 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
               </div>
             </div>
 
-            {/* Depth badge — switches to shallow range when bite is active */}
+            {/* Depth badge — adjusts for shallow bite / thermocline / standard */}
             {depth?.target_depth_ft && (
-              <div className={`depth-badge ${depth.mode === 'shallow_bite' ? 'shallow' : ''}`}>
-                {depth.mode === 'shallow_bite' ? '🌅' : '🎯'}
+              <div className={`depth-badge ${depth.mode === 'shallow_bite' ? 'shallow' : depth.mode === 'thermocline' ? 'thermocline' : ''}`}>
+                {depth.mode === 'shallow_bite' ? '🌅' : depth.mode === 'thermocline' ? '🌊' : '🎯'}
                 {' '}Target {depth.target_depth_ft[0]}–{depth.target_depth_ft[1]} ft
                 {depth.mode === 'shallow_bite' && (
                   <span className="shallow-tag">SHALLOW BITE</span>
                 )}
-                {depth.also_check_ft && (
-                  <span className="also-check">also {depth.also_check_ft[0]}–{depth.also_check_ft[1]}ft mid-day</span>
+                {depth.mode === 'thermocline' && (
+                  <span className="thermocline-tag">ABOVE THERMOCLINE {depth.thermocline_ft}ft</span>
                 )}
-                {depth.mode !== 'shallow_bite' && (
+                {depth.also_check_ft && (
+                  <span className="also-check">also {depth.also_check_ft[0]}–{depth.also_check_ft[1]}ft</span>
+                )}
+                {depth.mode === 'standard' && (
                   <span className="season-tag">{spot.season?.replace('_', ' ')}</span>
                 )}
               </div>
@@ -178,18 +181,34 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
                 )}
 
                 {/* Factor breakdown */}
-                <div className="factors-grid">
-                  <FactorPill label="Water Temp" value={bd.water_temp} />
-                  <FactorPill label="Pressure" value={bd.pressure} />
-                  <FactorPill label="Wind" value={bd.wind} />
-                  <FactorPill label="Solunar" value={bd.solunar} />
-                  <FactorPill label="Monthly" value={bd.monthly_qual} />
-                  <FactorPill label="Time" value={bd.time_of_day} />
-                </div>
+                {bd && (
+                  <div className="factors-grid">
+                    <FactorPill label="Water Temp" value={bd.water_temp} />
+                    <FactorPill label="Pressure" value={bd.pressure} />
+                    <FactorPill label="Wind" value={bd.wind} />
+                    <FactorPill label="Solunar" value={bd.solunar} />
+                    <FactorPill label="Monthly" value={bd.monthly_qual} />
+                    <FactorPill label="Time" value={bd.time_of_day} />
+                  </div>
+                )}
 
                 {/* Score modifiers */}
-                {spot.bonuses && (spot.bonuses.catch_log !== 0 || spot.bonuses.odnr_seasonal !== 0 || spot.bonuses.front_penalty !== 0) && (
+                {spot.bonuses && (
+                  spot.bonuses.catch_log !== 0 || spot.bonuses.odnr_seasonal !== 0 ||
+                  spot.bonuses.front_penalty !== 0 || spot.bonuses.spawn_penalty !== 0 ||
+                  spot.bonuses.goby_bonus !== 0
+                ) && (
                   <div className="bonuses-row">
+                    {spot.bonuses.spawn_penalty !== 0 && (
+                      <span className="bonus-chip negative">
+                        🐟 {spot.spawn?.label} {spot.bonuses.spawn_penalty}
+                      </span>
+                    )}
+                    {spot.bonuses.goby_bonus !== 0 && (
+                      <span className={`bonus-chip ${spot.bonuses.goby_bonus > 0 ? 'positive' : 'negative'}`}>
+                        🦈 Goby {spot.bonuses.goby_bonus > 0 ? '+' : ''}{spot.bonuses.goby_bonus}
+                      </span>
+                    )}
                     {spot.bonuses.front_penalty !== 0 && (
                       <span className="bonus-chip negative">
                         🌬 Post-front {spot.bonuses.front_penalty}
@@ -312,6 +331,18 @@ const styles = `
   background: rgba(250,204,21,0.12);
   color: #fde68a;
   border: 1px solid rgba(250,204,21,0.3);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.depth-badge.thermocline { color: #38bdf8; }
+.thermocline-tag {
+  background: rgba(56,189,248,0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56,189,248,0.3);
   font-size: 10px;
   font-weight: 700;
   padding: 1px 7px;

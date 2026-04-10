@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Component } from 'react'
 import FishingMap from './components/FishingMap'
 import SpotList from './components/SpotList'
 import ConditionsBar from './components/ConditionsBar'
@@ -7,6 +7,21 @@ import useGeolocation from './hooks/useGeolocation'
 import './App.css'
 
 const API = typeof __API_BASE__ !== 'undefined' ? __API_BASE__ : ''
+
+class ErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { error: null } }
+  static getDerivedStateFromError(e) { return { error: e.message || String(e) } }
+  render() {
+    if (this.state.error) return (
+      <div style={{ padding: 20, color: '#fca5a5', background: '#450a0a', borderRadius: 8, margin: 12 }}>
+        ⚠ Something went wrong: {this.state.error}
+        <button style={{ display: 'block', marginTop: 10, padding: '6px 14px', cursor: 'pointer' }}
+          onClick={() => this.setState({ error: null })}>Retry</button>
+      </div>
+    )
+    return this.props.children
+  }
+}
 
 export default function App() {
   const [spotsData, setSpotsData]       = useState(null)
@@ -90,6 +105,16 @@ export default function App() {
         </div>
       )}
 
+      {spotsData?.conditions_summary?.spawn_cr_warning && (
+        <div className="cr-warning-banner">
+          🥚 <strong>{spotsData.conditions_summary.spawn_label}:</strong> Bass are on nests or guarding fry.
+          Release fish quickly and close to where caught — removing a male from his nest exposes eggs/fry to goby predation.
+          {spotsData.conditions_summary.spawn_depth_note && (
+            <span> {spotsData.conditions_summary.spawn_depth_note}.</span>
+          )}
+        </div>
+      )}
+
       {spotsData && (
         <ConditionsBar conditions={spotsData.conditions_summary} season={spotsData.season} />
       )}
@@ -111,37 +136,43 @@ export default function App() {
 
       <div className="app-body">
         <div className={`map-panel ${mobileTab === 'map' ? 'mobile-visible' : 'mobile-hidden'}`}>
-          {spotsData ? (
-            <FishingMap
-              key={mapKey}
-              spots={spotsData.spots}
-              selectedSpot={selectedSpot}
-              onSelectSpot={(spot) => { setSelectedSpot(spot); setMobileTab('list') }}
-              userLocation={location}
-            />
-          ) : loading ? (
-            <div className="map-loading">
-              <div className="spinner" />
-              <p>Fetching Lake Erie conditions...</p>
-            </div>
-          ) : null}
+          <ErrorBoundary>
+            {spotsData ? (
+              <FishingMap
+                key={mapKey}
+                spots={spotsData.spots}
+                selectedSpot={selectedSpot}
+                onSelectSpot={(spot) => { setSelectedSpot(spot); setMobileTab('list') }}
+                userLocation={location}
+              />
+            ) : loading ? (
+              <div className="map-loading">
+                <div className="spinner" />
+                <p>Fetching Lake Erie conditions...</p>
+              </div>
+            ) : null}
+          </ErrorBoundary>
         </div>
 
         <div className={`forecast-panel ${mobileTab === 'forecast' ? 'mobile-visible' : 'mobile-hidden'}`}>
-          <ForecastView apiBase={API} />
+          <ErrorBoundary>
+            <ForecastView apiBase={API} />
+          </ErrorBoundary>
         </div>
 
         <div className={`list-panel ${mobileTab === 'list' ? 'mobile-visible' : 'mobile-hidden'}`}>
-          {spotsData && (
-            <SpotList
-              spots={spotsData.spots}
-              selectedSpot={selectedSpot}
-              onSelectSpot={setSelectedSpot}
-              conditions={spotsData.conditions_summary}
-              userLocation={location}
-              apiBase={API}
-            />
-          )}
+          <ErrorBoundary>
+            {spotsData && (
+              <SpotList
+                spots={spotsData.spots}
+                selectedSpot={selectedSpot}
+                onSelectSpot={setSelectedSpot}
+                conditions={spotsData.conditions_summary}
+                userLocation={location}
+                apiBase={API}
+              />
+            )}
+          </ErrorBoundary>
         </div>
       </div>
     </div>
