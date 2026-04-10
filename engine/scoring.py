@@ -13,6 +13,8 @@ Weights (must sum to 1.0):
 
 Post-score modifiers (applied after weighted sum, clamped 0-100):
   post_front:      -15 to -5   — cold front suppression (Lang 2023; Brandt 1987)
+  spawn_penalty:   -15 to -5   — spawn/fry-guard phase suppression (Brownscombe 2024)
+  goby_bonus:      -5 to +12   — round goby seasonal forage availability
   catch_bonus:     ±20         — personal catch history at this spot this month
   odnr_modifier:   ±10         — lake-wide ODNR seasonal activity modifier
 
@@ -29,6 +31,7 @@ from pathlib import Path
 from engine.weather import score_pressure, score_wind, score_cloud_cover, get_shallow_bite_status
 from engine.water_temp import score_water_temp, get_season
 from engine.solunar import get_solunar_score
+from engine.spawn import get_spawn_phase
 
 try:
     from engine.gbif import get_nearby_gbif_density
@@ -65,6 +68,45 @@ WEIGHTS = {
     "cloud_cover":  0.05,
     "gbif_density": 0.03,
 }
+
+
+def score_goby_forage(spot: dict, water_temp_f: float | None, month: int) -> int:
+    """
+    Score based on round goby forage availability for this spot and season.
+
+    Research (Steinhart et al. 2004; Brownscombe 2024):
+    - Since goby colonisation, 73% of eastern basin smallmouth diets are gobies
+    - Gobies concentrate in nearshore rocky/cobble habitat <15m from May–Oct
+    - October: begin moving offshore >20m; largely unavailable to nearshore bass by Nov
+    - Winter: >30m depth — bass must seek them at depth (changes optimal spot selection)
+
+    Spots with primary_forage == 'round_goby' get seasonal modifiers.
+    Crayfish-primary spots are unaffected (crayfish available year-round in rocky habitat).
+    """
+    if spot.get("primary_forage") != "round_goby":
+        return 0
+
+    temp = water_temp_f or 0
+
+    # Gobies offshore/unavailable in winter and early spring
+    if month <= 4 or month >= 11:
+        return -5   # bass must follow gobies deep — nearshore spots less productive
+
+    # Early May: gobies moving inshore but not concentrated yet
+    if month == 5 and temp < 55:
+        return 2
+
+    # Peak goby availability: late May through September, shallow rocky habitat
+    if (month == 5 and temp >= 55) or (6 <= month <= 9):
+        return 12   # gobies abundant and accessible — rocky spots highly productive
+
+    # October: gobies beginning offshore migration; still some available nearshore
+    if month == 10 and temp >= 50:
+        return 5
+    if month == 10:
+        return -3   # gobies mostly gone shallow
+
+    return 0
 
 
 def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
@@ -109,13 +151,21 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
     # --- Post-score modifiers ---
 
     # Post-front suppression (Lang 2023; Brandt 1987)
-    # Hard front passage causes significant feeding suppression for 24-72hrs.
-    # Detected via rapidly rising pressure (front just passed through).
     pressure_trend = conditions.get("pressure_trend", "stable")
     front_penalty = {
-        "rising_fast": -15,  # hard front just passed — worst bite, large adults shut down
-        "rising":       -5,  # post-front recovery — still suppressed, improving
+        "rising_fast": -15,
+        "rising":       -5,
     }.get(pressure_trend, 0)
+
+    # Spawn phase suppression (Brownscombe 2024; Wiegmann & Wiegmann 2005)
+    # Males on nests / guarding fry are not actively feeding.
+    # Post-spawn females need recovery time before resuming normal activity.
+    water_temp_f  = conditions.get("water_temp_f")
+    spawn_data    = get_spawn_phase(water_temp_f, month)
+    spawn_penalty = spawn_data["score_penalty"]
+
+    # Round goby forage availability — seasonal nearshore/offshore migration
+    goby_bonus = score_goby_forage(spot, water_temp_f, month)
 
     catch_bonus = 0
     if CATCH_LOG_AVAILABLE:
@@ -127,11 +177,16 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
         raw = odnr.get("lake_wide_monthly_modifier", {}).get(str(month), 0)
         odnr_modifier = round(raw * 0.4)
 
-    total = max(0, min(100, round(total + front_penalty + catch_bonus + odnr_modifier)))
+    total = max(0, min(100, round(
+        total + front_penalty + spawn_penalty + goby_bonus + catch_bonus + odnr_modifier
+    )))
 
     # --- Shallow bite window ---
     shallow_bite = get_shallow_bite_status(cloud_pct, hour, month)
-    recommended_depth = _get_depth_info(spot, season, shallow_bite)
+
+    # Thermocline depth (passed through conditions from api.py)
+    thermocline_ft = conditions.get("thermocline_depth_ft")
+    recommended_depth = _get_depth_info(spot, season, shallow_bite, thermocline_ft)
 
     # Techniques from ODNR data
     techniques = odnr.get("presentation_by_season", {}).get(season, []) if odnr else []
@@ -142,7 +197,14 @@ def score_spot(spot: dict, conditions: dict, now: datetime.datetime) -> dict:
         "score":        total,
         "rating":       _rating_label(total),
         "breakdown":    breakdown,
-        "bonuses":      {"catch_log": catch_bonus, "odnr_seasonal": odnr_modifier, "front_penalty": front_penalty},
+        "bonuses": {
+            "catch_log":     catch_bonus,
+            "odnr_seasonal": odnr_modifier,
+            "front_penalty": front_penalty,
+            "spawn_penalty": spawn_penalty,
+            "goby_bonus":    goby_bonus,
+        },
+        "spawn":        spawn_data,
         "season":       season,
         "month":        month,
         "solunar":      solunar_data,
@@ -160,10 +222,14 @@ def rank_spots(spots: list, conditions: dict, now: datetime.datetime) -> list:
     return sorted(scored, key=lambda x: x["score"], reverse=True)
 
 
-def _get_depth_info(spot: dict, season: str, shallow_bite: dict) -> dict:
+def _get_depth_info(spot: dict, season: str, shallow_bite: dict, thermocline_ft: float | None = None) -> dict:
     """
-    Return the recommended fishing depth range, adjusted for shallow bite window.
-    If shallow bite is active and the spot has a shallow_summer_depth_ft, use that.
+    Return recommended fishing depth, adjusted for shallow bite window and thermocline.
+
+    Priority:
+      1. Shallow bite window (dawn/dusk/overcast) → always use shallow structure first
+      2. Thermocline present (summer) → target just above the thermocline
+      3. Standard seasonal depth from spot data
     """
     season_depth_key = {
         "pre_spawn":  "spawn_depth_ft",
@@ -177,19 +243,39 @@ def _get_depth_info(spot: dict, season: str, shallow_bite: dict) -> dict:
     standard_depth = spot.get(standard_key, spot.get("depth_range", [10, 25]))
     shallow_depth  = spot.get("shallow_summer_depth_ft")
 
-    # Use shallow range if bite is active, spot has shallow structure, and it's prime season
+    # Priority 1: shallow bite window
     use_shallow = (
         shallow_bite.get("active")
         and shallow_depth is not None
         and season in ("post_spawn", "summer", "fall", "spawn", "pre_spawn")
     )
-
     if use_shallow:
         return {
             "target_depth_ft": shallow_depth,
             "also_check_ft":   standard_depth,
             "mode":            "shallow_bite",
             "season":          season,
+        }
+
+    # Priority 2: thermocline adjustment (summer only)
+    # Bass suspend just above the thermocline or on structure rising into that band.
+    # Brownscombe (2024): eastern basin fish use metalimnion to avoid warm surface water.
+    if (
+        thermocline_ft is not None
+        and season in ("summer", "post_spawn")
+        and max(standard_depth) > thermocline_ft - 4
+    ):
+        # Target the 8-ft band just above the thermocline
+        thermo_target = [
+            round(max(8, thermocline_ft - 9)),
+            round(thermocline_ft - 2),
+        ]
+        return {
+            "target_depth_ft":  thermo_target,
+            "also_check_ft":    standard_depth,
+            "mode":             "thermocline",
+            "thermocline_ft":   thermocline_ft,
+            "season":           season,
         }
 
     return {

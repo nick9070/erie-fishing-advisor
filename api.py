@@ -30,6 +30,8 @@ from engine.weather import get_open_meteo, get_open_meteo_hourly, score_pressure
 from engine.water_temp import get_buoy_conditions, get_season
 from engine.scoring import rank_spots
 from engine.catch_log import init_db, log_catch, get_catches, get_spot_stats
+from engine.spawn import get_spawn_phase
+from engine.thermocline import get_thermocline
 
 init_db()
 
@@ -156,9 +158,18 @@ def _fetch_conditions() -> dict:
     # Air temp: buoy > Open-Meteo
     air_temp_f = buoy.get("air_temp_f") or sky.get("temp_f")
 
+    water_temp_f = buoy.get("water_temp_f")
+    now_month    = datetime.datetime.now().month
+
+    # Thermocline (GLSEA satellite SST + empirical model — no new dependencies)
+    thermo = get_thermocline(water_temp_f, now_month, LAKE_CENTER_LAT, LAKE_CENTER_LON)
+
+    # Spawn phase (temperature + month driven)
+    spawn = get_spawn_phase(water_temp_f, now_month)
+
     data = {
         # Water (buoy only)
-        "water_temp_f":       buoy.get("water_temp_f"),
+        "water_temp_f":       water_temp_f,
         "water_temp_c":       buoy.get("water_temp_c"),
         "buoy_id":            buoy.get("buoy_id"),
         "buoy_name":          buoy.get("buoy_name"),
@@ -176,6 +187,16 @@ def _fetch_conditions() -> dict:
         "cloud_cover_pct":    sky.get("cloud_cover_pct", 0),
         "conditions":         sky.get("conditions", "unknown"),
         "precipitation":      sky.get("precipitation", 0),
+        # Thermocline
+        "thermocline_depth_ft":  thermo["depth_ft"],
+        "thermocline_stratified": thermo["stratified"],
+        "thermocline_note":      thermo["note"],
+        "thermocline_source":    thermo["source"],
+        # Spawn phase
+        "spawn_phase":       spawn["phase"],
+        "spawn_label":       spawn["label"],
+        "spawn_cr_warning":  spawn["cr_warning"],
+        "spawn_depth_note":  spawn["depth_note"],
     }
 
     _cache = {
@@ -224,18 +245,25 @@ def get_spots():
         "season":             get_season(now.month),
         "population_outlook": odnr.get("population_outlook_2025"),
         "conditions_summary": {
-            "water_temp_f":         conditions.get("water_temp_f"),
-            "pressure_hpa":         conditions.get("pressure_hpa"),
-            "pressure_trend":       conditions.get("pressure_trend"),
-            "pressure_rate_mb_hr":  conditions.get("pressure_rate_mb_hr"),
-            "wind_speed_mph":       conditions.get("wind_speed_mph"),
-            "wind_gust_mph":        conditions.get("wind_gust_mph"),
-            "wind_dir_label":       conditions.get("wind_dir_label"),
-            "conditions":           conditions.get("conditions"),
-            "temp_f":               conditions.get("temp_f"),
-            "cloud_cover_pct":      conditions.get("cloud_cover_pct"),
-            "buoy_id":              conditions.get("buoy_id"),
-            "buoy_name":            conditions.get("buoy_name"),
+            "water_temp_f":           conditions.get("water_temp_f"),
+            "pressure_hpa":           conditions.get("pressure_hpa"),
+            "pressure_trend":         conditions.get("pressure_trend"),
+            "pressure_rate_mb_hr":    conditions.get("pressure_rate_mb_hr"),
+            "wind_speed_mph":         conditions.get("wind_speed_mph"),
+            "wind_gust_mph":          conditions.get("wind_gust_mph"),
+            "wind_dir_label":         conditions.get("wind_dir_label"),
+            "conditions":             conditions.get("conditions"),
+            "temp_f":                 conditions.get("temp_f"),
+            "cloud_cover_pct":        conditions.get("cloud_cover_pct"),
+            "buoy_id":                conditions.get("buoy_id"),
+            "buoy_name":              conditions.get("buoy_name"),
+            "thermocline_depth_ft":   conditions.get("thermocline_depth_ft"),
+            "thermocline_stratified": conditions.get("thermocline_stratified"),
+            "thermocline_note":       conditions.get("thermocline_note"),
+            "spawn_phase":            conditions.get("spawn_phase"),
+            "spawn_label":            conditions.get("spawn_label"),
+            "spawn_cr_warning":       conditions.get("spawn_cr_warning"),
+            "spawn_depth_note":       conditions.get("spawn_depth_note"),
         },
         "spots": ranked,
     }
