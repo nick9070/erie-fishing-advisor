@@ -23,9 +23,10 @@ function getScoreColor(score) {
 
 export default function ChatModal({ context, apiBase, onClose }) {
   const { spot_name, score, rating, date, hour, sections } = context
-  const [messages, setMessages] = useState([])
-  const [input,    setInput]    = useState('')
-  const [loading,  setLoading]  = useState(false)
+  const [messages,   setMessages]   = useState([])
+  const [input,      setInput]      = useState('')
+  const [loading,    setLoading]    = useState(false)
+  const [minimized,  setMinimized]  = useState(false)
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
 
@@ -69,8 +70,25 @@ export default function ChatModal({ context, apiBase, onClose }) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
   }
 
+  // Minimized floating bar
+  if (minimized) {
+    return (
+      <div style={S.minimizedBar} onClick={() => setMinimized(false)}>
+        <span style={S.minimizedIcon}>💬</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={S.minimizedSpot}>{spot_name}</div>
+          {messages.length > 0 && (
+            <div style={S.minimizedCount}>{messages.length} message{messages.length !== 1 ? 's' : ''}</div>
+          )}
+        </div>
+        <span style={S.minimizedExpand}>▲</span>
+        <button style={S.minimizedClose} onClick={e => { e.stopPropagation(); onClose() }}>✕</button>
+      </div>
+    )
+  }
+
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) setMinimized(true) }}>
       <div style={S.modal}>
 
         {/* ── Header ── */}
@@ -85,6 +103,7 @@ export default function ChatModal({ context, apiBase, onClose }) {
                 <span style={S.scoreNum}>{score}</span>
                 <span style={S.scoreRating}>{rating}</span>
               </div>
+              <button style={S.closeBtn} onClick={() => setMinimized(true)}>─</button>
               <button style={S.closeBtn} onClick={onClose}>✕</button>
             </div>
           </div>
@@ -153,6 +172,22 @@ export default function ChatModal({ context, apiBase, onClose }) {
 }
 
 const S = {
+  minimizedBar: {
+    position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9000,
+    background: '#0a1f2e', borderTop: '1px solid #38bdf8',
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '12px 16px',
+    paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
+    cursor: 'pointer',
+  },
+  minimizedIcon: { fontSize: 18, flexShrink: 0 },
+  minimizedSpot: { fontSize: 13, fontWeight: 600, color: '#e2e8f0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  minimizedCount: { fontSize: 10, color: '#64748b', marginTop: 1 },
+  minimizedExpand: { fontSize: 12, color: '#38bdf8', flexShrink: 0 },
+  minimizedClose: {
+    background: 'none', border: '1px solid #1e3a4a', color: '#64748b',
+    borderRadius: 6, padding: '3px 7px', cursor: 'pointer', fontSize: 11, flexShrink: 0,
+  },
   overlay: {
     position: 'fixed', inset: 0, zIndex: 9000,
     background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(3px)',
