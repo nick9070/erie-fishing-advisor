@@ -99,13 +99,7 @@ export default function App() {
         <div className="geo-banner">⚠ {geoError}</div>
       )}
 
-      {spotsData?.population_outlook?.east_basin === 'reduced' && (
-        <div className="outlook-banner">
-          ⚠ <strong>2025 ODNR:</strong> Reduced adult populations in eastern basin (poor 2022-23 year-class). Fewer fish, larger average size. Stay on proven spots.
-        </div>
-      )}
-
-      {spotsData?.conditions_summary?.spawn_cr_warning && (
+{spotsData?.conditions_summary?.spawn_cr_warning && (
         <div className="cr-warning-banner">
           🥚 <strong>{spotsData.conditions_summary.spawn_label}:</strong> Bass are on nests or guarding fry.
           Release fish quickly and close to where caught — removing a male from his nest exposes eggs/fry to goby predation.
