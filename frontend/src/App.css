@@ -192,17 +192,12 @@ body {
 }
 
 .forecast-panel {
-  display: none;
+  display: flex;
+  flex-direction: column;
   width: 420px;
   flex-shrink: 0;
   background: #0d1f2d;
   border-left: 1px solid #1e3a4a;
-}
-
-/* Show forecast panel on desktop when active */
-.forecast-panel.mobile-visible {
-  display: flex;
-  flex-direction: column;
 }
 
 /* ── Mobile tabs ── */

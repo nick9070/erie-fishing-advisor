@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, Component } from 'react'
 import FishingMap from './components/FishingMap'
-import SpotList from './components/SpotList'
 import ConditionsBar from './components/ConditionsBar'
 import ForecastView from './components/ForecastView'
 import useGeolocation from './hooks/useGeolocation'
@@ -29,7 +28,7 @@ export default function App() {
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
   const [lastUpdated, setLastUpdated]   = useState(null)
-  const [mobileTab, setMobileTab]       = useState('list') // 'map' | 'list'
+  const [mobileTab, setMobileTab]       = useState('forecast') // 'map' | 'forecast'
   const [mapKey, setMapKey]             = useState(0)
 
   const { location, error: geoError } = useGeolocation()
@@ -115,17 +114,13 @@ export default function App() {
 
       <div className="mobile-tabs">
         <button
-          className={`mobile-tab ${mobileTab === 'list' ? 'active' : ''}`}
-          onClick={() => setMobileTab('list')}
+          className={`mobile-tab ${mobileTab === 'forecast' ? 'active' : ''}`}
+          onClick={() => setMobileTab('forecast')}
         >📋 Spots</button>
         <button
           className={`mobile-tab ${mobileTab === 'map' ? 'active' : ''}`}
           onClick={() => { setMobileTab('map'); setMapKey(k => k + 1) }}
         >🗺 Map</button>
-        <button
-          className={`mobile-tab ${mobileTab === 'forecast' ? 'active' : ''}`}
-          onClick={() => setMobileTab('forecast')}
-        >📅 Forecast</button>
       </div>
 
       <div className="app-body">
@@ -150,22 +145,7 @@ export default function App() {
 
         <div className={`forecast-panel ${mobileTab === 'forecast' ? 'mobile-visible' : 'mobile-hidden'}`}>
           <ErrorBoundary>
-            <ForecastView apiBase={API} />
-          </ErrorBoundary>
-        </div>
-
-        <div className={`list-panel ${mobileTab === 'list' ? 'mobile-visible' : 'mobile-hidden'}`}>
-          <ErrorBoundary>
-            {spotsData && (
-              <SpotList
-                spots={spotsData.spots}
-                selectedSpot={selectedSpot}
-                onSelectSpot={setSelectedSpot}
-                conditions={spotsData.conditions_summary}
-                userLocation={location}
-                apiBase={API}
-              />
-            )}
+            <ForecastView apiBase={API} spotsData={spotsData} userLocation={location} />
           </ErrorBoundary>
         </div>
       </div>
