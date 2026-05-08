@@ -54,13 +54,46 @@ function FactorPill({ label, value }) {
   )
 }
 
-function ForecastSpotRow({ spot }) {
+function ForecastSpotRow({ spot, apiBase, conditions }) {
   const [expanded, setExpanded] = useState(false)
+  const [aiText,   setAiText]   = useState(null)
+  const [aiLoad,   setAiLoad]   = useState(false)
+  const [aiError,  setAiError]  = useState(null)
   const color  = getScoreColor(spot.score)
   const bd     = spot.breakdown
   const sol    = spot.solunar
   const depth  = spot.depth_info
   const shallow = spot.shallow_bite
+
+  useEffect(() => {
+    if (!expanded || aiText || aiLoad) return
+    let cancelled = false
+    setAiLoad(true)
+    fetch(`${apiBase}/api/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        spot_name: spot.spot_name,
+        score: spot.score,
+        rating: spot.rating,
+        season: spot.season ?? 'unknown',
+        breakdown: bd,
+        bonuses: spot.bonuses ?? null,
+        solunar: sol,
+        conditions: conditions ?? {},
+        depth_info: depth ?? null,
+        techniques: spot.techniques ?? null,
+        forage: spot.forage ?? null,
+        spawn: spot.spawn ?? null,
+        notes: spot.notes ?? null,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setAiText(data.explanation) })
+      .catch(() => { if (!cancelled) setAiError('Could not load AI explanation.') })
+      .finally(() => { if (!cancelled) setAiLoad(false) })
+    return () => { cancelled = true }
+  }, [expanded])
 
   return (
     <div
@@ -170,6 +203,14 @@ function ForecastSpotRow({ spot }) {
           {spot.notes && (
             <div style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.5 }}>📍 {spot.notes}</div>
           )}
+
+          {/* AI explanation */}
+          <div style={{ background: '#071520', border: '1px solid #1e3a4a', borderRadius: 6, padding: '10px 12px' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>🤖 AI Guide</div>
+            {aiLoad  && <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>⟳ Analyzing conditions...</p>}
+            {aiError && <p style={{ fontSize: 11, color: '#f87171', margin: 0 }}>{aiError}</p>}
+            {aiText  && <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>{aiText}</p>}
+          </div>
         </div>
       )}
     </div>
@@ -331,7 +372,7 @@ export default function ForecastView({ apiBase }) {
                 SPOT RANKINGS — {formatHour(selectedHour).toUpperCase()} · tap to expand
               </div>
               {hourObj.spots.map(spot => (
-                <ForecastSpotRow key={spot.spot_id} spot={spot} />
+                <ForecastSpotRow key={spot.spot_id} spot={spot} apiBase={apiBase} conditions={hourObj.conditions} />
               ))}
 
             </div>

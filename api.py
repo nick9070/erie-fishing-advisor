@@ -362,16 +362,19 @@ class ExplainRequest(BaseModel):
     rating:     str
     season:     str
     breakdown:  dict
+    bonuses:    Optional[dict] = None
     solunar:    dict
     conditions: dict
     depth_info: Optional[dict] = None
     techniques: Optional[list] = None
     forage:     Optional[str]  = None
+    spawn:      Optional[dict] = None
+    notes:      Optional[str]  = None
 
 
 @app.post("/api/explain")
 def explain_spot(req: ExplainRequest):
-    """Use Claude to generate a natural-language fishing recommendation."""
+    """Use Claude to generate a biology-grounded natural-language fishing brief."""
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
     if not anthropic_key:
         return {"explanation": "Add ANTHROPIC_API_KEY to Render environment variables to enable AI explanations."}
@@ -382,34 +385,107 @@ def explain_spot(req: ExplainRequest):
     bd         = req.breakdown
     sol        = req.solunar
     cond       = req.conditions
+    bonuses    = req.bonuses or {}
     depth      = req.depth_info or {}
     techniques = req.techniques or []
     forage     = req.forage or "round goby"
+    spawn      = req.spawn or {}
 
-    rate = cond.get("pressure_rate_mb_hr", 0)
-    rate_str = f"{rate:+.1f} mb/hr" if rate else ""
+    rate     = cond.get("pressure_rate_mb_hr", 0) or 0
+    rate_str = f"{rate:+.1f} mb/hr" if abs(rate) >= 0.3 else "stable"
 
-    prompt = f"""You are an expert Lake Erie smallmouth bass fishing guide specializing in the Ontario / Canadian side of the eastern basin.
-Give a concise, practical fishing recommendation (4-5 sentences) for right now.
+    # Thermocline context
+    thermo_ft = cond.get("thermocline_depth_ft")
+    thermo_str = (
+        f"stratified at {thermo_ft}ft — bass compressing above it"
+        if thermo_ft and cond.get("thermocline_stratified")
+        else "water column mixed (no thermocline)"
+    )
 
-Spot: {req.spot_name}
-Score: {req.score}/100 ({req.rating}) | Season: {req.season.replace('_', ' ')}
-Target depth: {depth.get('target_depth_ft', 'unknown')} ft | Primary forage: {forage.replace('_', ' ')}
-Techniques: {', '.join(techniques) if techniques else 'tube jig, drop-shot'}
+    # Water clarity
+    clarity_label = cond.get("clarity_label", "unknown")
+    kd490         = cond.get("clarity_kd490")
+    clarity_str   = f"{clarity_label} (Kd490={kd490:.2f})" if kd490 else clarity_label
 
-Current conditions:
-- Water: {cond.get('water_temp_f', '?')}°F | Air: {cond.get('temp_f', '?')}°F
-- Pressure: {cond.get('pressure_hpa', '?')} hPa ({cond.get('pressure_trend', '?')} {rate_str})
-- Wind: {cond.get('wind_speed_mph', '?')} mph {cond.get('wind_dir_label', '')}
-- Sky: {cond.get('conditions', '?')} | Cloud: {cond.get('cloud_cover_pct', '?')}%
+    # Temperature trend
+    temp_trend    = cond.get("temp_trend_label", "unknown")
+    temp_delta    = cond.get("temp_trend_delta_f")
+    temp_delta_str = f"{temp_delta:+.1f}°F over 7 days" if temp_delta is not None else ""
+    temp_trend_str = f"{temp_trend} {temp_delta_str}".strip()
 
-Factor scores: water_temp={bd.get('water_temp')} | pressure={bd.get('pressure')} | wind={bd.get('wind')} | solunar={bd.get('solunar')} ({sol.get('active_period','inactive')}) | monthly={bd.get('monthly_qual')}
+    # Wind persistence
+    wind_persist_bonus = bonuses.get("wind_persistence", 0)
+    wind_persist_str   = (
+        "persistent favorable wind 24h — forage stacked on structure"
+        if wind_persist_bonus >= 8 else
+        "mostly favorable wind 24h"
+        if wind_persist_bonus >= 4 else
+        "variable/unfavorable wind history"
+    )
 
-Tell me: what are the fish doing right now at this spot, exactly where and how deep to target, and your top 1-2 lure/technique suggestions for these specific conditions. Eastern basin context: clear water, goby-heavy diet, fish run deeper than western basin. Be direct and specific."""
+    # Current
+    current_bonus = bonuses.get("current", 0)
+    current_str   = (
+        "strong feeding-lane current"  if current_bonus >= 6 else
+        "moderate current"             if current_bonus >= 2 else
+        "slack current"
+    )
+
+    # Depth targeting
+    tgt = depth.get("target_depth_ft")
+    depth_str = f"{tgt[0]}–{tgt[1]}ft ({depth.get('mode','standard')})" if tgt else "unknown"
+
+    # Active modifiers worth mentioning
+    modifier_notes = []
+    if bonuses.get("spawn_penalty", 0) < -5:
+        modifier_notes.append(f"spawn/fry-guard penalty ({spawn.get('label','')}) — males not actively feeding")
+    if bonuses.get("goby_bonus", 0) > 5:
+        modifier_notes.append("gobies fully available nearshore — prime forage window")
+    elif bonuses.get("goby_bonus", 0) < 0:
+        modifier_notes.append("gobies retreating offshore — nearshore bite reduced")
+    if bonuses.get("front_penalty", 0) < -5:
+        modifier_notes.append("post-front suppression — fish lethargic 24-48h")
+    if bonuses.get("temp_trend", 0) >= 6:
+        modifier_notes.append("multi-day warming trend — fish turning on")
+    elif bonuses.get("temp_trend", 0) <= -6:
+        modifier_notes.append("multi-day cooling trend — fish shutting down")
+    modifiers_str = " | ".join(modifier_notes) if modifier_notes else "no significant suppression active"
+
+    prompt = f"""You are an expert Lake Erie smallmouth bass fishing guide for the Ontario eastern basin. Write a 5-sentence natural-language brief that explains what the bass are doing right now, grounded in biology and this fishery's specific characteristics.
+
+SPOT: {req.spot_name}
+SCORE: {req.score}/100 ({req.rating}) | SEASON: {req.season.replace('_', ' ')}
+
+CONDITIONS:
+- Water temp: {cond.get('water_temp_f', '?')}°F | Air: {cond.get('temp_f', '?')}°F | Trend: {temp_trend_str}
+- Pressure: {cond.get('pressure_hpa', '?')} hPa — {cond.get('pressure_trend', '?')} ({rate_str})
+- Wind: {cond.get('wind_speed_mph', '?')} mph {cond.get('wind_dir_label', '')} | {wind_persist_str}
+- Sky: {cond.get('conditions', '?')}, {cond.get('cloud_cover_pct', '?')}% cloud cover
+- Thermocline: {thermo_str}
+- Water clarity: {clarity_str}
+- Current: {current_str}
+- Spawn phase: {spawn.get('label', cond.get('spawn_label', 'active'))}
+
+KEY MODIFIERS: {modifiers_str}
+
+DEPTH TARGET: {depth_str}
+FORAGE: {forage.replace('_', ' ')} | TECHNIQUES: {', '.join(techniques) if techniques else 'tube jig, drop-shot'}
+SOLUNAR: {sol.get('active_period', 'inactive')} (moon {sol.get('moon_phase_pct', '?')}%)
+
+FACTOR SCORES: temp={bd.get('water_temp')} | pressure={bd.get('pressure')} | wind={bd.get('wind')} | monthly={bd.get('monthly_qual')} | time={bd.get('time_of_day')}
+
+Write 5 sentences covering:
+1. Where bass are in their seasonal movement cycle right now and what's driving their feeding state — reference temperature trend, spawn phase, or seasonal migration as appropriate.
+2. How the pressure system and wind are affecting bass behavior at this spot specifically — include the biological mechanism (feeding lane creation, forage concentration, post-front suppression).
+3. The structural and biological reasons this spot works or doesn't in these conditions — thermocline positioning, goby availability by depth, current influence on feeding posture, water clarity effects on light-sensitivity.
+4. Precise depth, zone, and presentation for this hour — be specific (e.g. "work the 14–18ft rock edge with a drop-shot, 2/0 hook, 10lb fluoro").
+5. One timing or tactical note the angler should act on immediately — e.g. first-light window closing, solunar peak approaching, wind building.
+
+Write in the voice of a knowledgeable guide talking to a serious angler. Reference real biology (Brownscombe 2024 on thermocline use; Suski & Ridgway 2009 on dawn shallow movement; eastern basin goby diet >70%; eastern basin spawns 2–3 weeks later than western) where it fits naturally — don't force citations, just let the knowledge show. No bullet points. No headers. Flowing prose."""
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=350,
+        max_tokens=550,
         messages=[{"role": "user", "content": prompt}]
     )
     return {"explanation": message.content[0].text}
@@ -479,6 +555,7 @@ def get_forecast(date: str):
                 "spot_name":   s["spot_name"],
                 "score":       s["score"],
                 "rating":      s["rating"],
+                "season":      s.get("season"),
                 "breakdown":   s["breakdown"],
                 "bonuses":     s["bonuses"],
                 "depth_info":  s["depth_info"],
@@ -487,6 +564,8 @@ def get_forecast(date: str):
                 "techniques":  s["techniques"],
                 "forage":      s["forage"],
                 "notes":       s["notes"],
+                "spawn":       s.get("spawn"),
+                "coords":      s["coords"],
             }
             for i, s in enumerate(ranked)
         ]

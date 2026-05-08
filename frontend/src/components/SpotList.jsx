@@ -31,52 +31,43 @@ function FactorPill({ label, value }) {
 
 function AiExplain({ spot, conditions, apiBase }) {
   const [text, setText] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const handleFetch = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch(`${apiBase}/api/explain`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          spot_name: spot.spot_name,
-          score: spot.score,
-          rating: spot.rating,
-          season: spot.season,
-          breakdown: spot.breakdown,
-          solunar: spot.solunar,
-          conditions,
-          depth_info: spot.depth_info,
-          techniques: spot.techniques,
-          forage: spot.forage,
-        }),
-      })
-      const data = await res.json()
-      setText(data.explanation)
-    } catch {
-      setError('Could not load AI explanation.')
-    } finally {
-      setLoading(false)
-    }
-  }
+  useEffect(() => {
+    let cancelled = false
+    fetch(`${apiBase}/api/explain`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        spot_name: spot.spot_name,
+        score: spot.score,
+        rating: spot.rating,
+        season: spot.season,
+        breakdown: spot.breakdown,
+        bonuses: spot.bonuses ?? null,
+        solunar: spot.solunar,
+        conditions,
+        depth_info: spot.depth_info ?? null,
+        techniques: spot.techniques ?? null,
+        forage: spot.forage ?? null,
+        spawn: spot.spawn ?? null,
+        notes: spot.notes ?? null,
+      }),
+    })
+      .then(r => r.json())
+      .then(data => { if (!cancelled) setText(data.explanation) })
+      .catch(() => { if (!cancelled) setError('Could not load AI explanation.') })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
-  if (text) {
-    return (
-      <div className="ai-box">
-        <div className="ai-label">🤖 AI Guide</div>
-        <p className="ai-text">{text}</p>
-      </div>
-    )
-  }
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <button className="ai-btn" onClick={handleFetch} disabled={loading}>
-        {loading ? '⟳ Thinking...' : '🤖 Ask AI Guide'}
-      </button>
-      {error && <span style={{ fontSize: 11, color: '#f87171' }}>{error}</span>}
+    <div className="ai-box">
+      <div className="ai-label">🤖 AI Guide</div>
+      {loading && <p className="ai-text" style={{ color: '#64748b' }}>⟳ Analyzing conditions...</p>}
+      {error   && <p className="ai-text" style={{ color: '#f87171', fontSize: 11 }}>{error}</p>}
+      {text    && <p className="ai-text">{text}</p>}
     </div>
   )
 }
@@ -236,8 +227,8 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
                   >
                     {justLogged ? '✓ Logged!' : '🎣 Log a Catch'}
                   </button>
-                  <AiExplain spot={spot} conditions={conditions} apiBase={apiBase} />
                 </div>
+                <AiExplain spot={spot} conditions={conditions} apiBase={apiBase} />
               </div>
             )}
           </div>
