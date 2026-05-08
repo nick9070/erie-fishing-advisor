@@ -510,6 +510,88 @@ Return ONLY the JSON object. No markdown fences, no text outside the JSON."""
         return {"sections": [{"title": "AI Guide", "body": raw}]}
 
 
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    messages: list
+    context:  dict
+
+
+@app.post("/api/chat")
+def chat_with_guide(req: ChatRequest):
+    """Conversational AI guide pre-loaded with full spot/conditions context."""
+    anthropic_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not anthropic_key:
+        return {"reply": "Add ANTHROPIC_API_KEY to enable the AI chat guide."}
+
+    import anthropic
+    client = anthropic.Anthropic(api_key=anthropic_key)
+
+    ctx  = req.context
+    cond = ctx.get("conditions", {})
+    bd   = ctx.get("breakdown", {})
+
+    # Format date/time
+    date_str = ctx.get("date", "")
+    hour     = ctx.get("hour")
+    if hour is not None:
+        h = int(hour)
+        time_str = "12am" if h == 0 else f"{h}am" if h < 12 else "12pm" if h == 12 else f"{h-12}pm"
+        dt_str = f"{date_str} at {time_str}"
+    else:
+        dt_str = f"{date_str} (live conditions)"
+
+    # Guide brief recap
+    sections = ctx.get("sections", [])
+    brief_str = "\n".join(
+        f"{s['title'].upper()}: {s['body']}" for s in sections
+    ) if sections else "No prior brief available."
+
+    # Conditions summary
+    thermo_ft = cond.get("thermocline_depth_ft")
+    thermo_str = (
+        f"stratified at {thermo_ft}ft" if thermo_ft and cond.get("thermocline_stratified")
+        else "mixed (no thermocline)"
+    )
+
+    system = f"""You are an expert Lake Erie smallmouth bass fishing guide for the Ontario eastern basin, having a real-time conversation with an angler.
+
+SPOT CONTEXT:
+- Spot: {ctx.get('spot_name')} | Score: {ctx.get('score')}/100 ({ctx.get('rating')}) | Season: {ctx.get('season', '').replace('_', ' ')}
+- Date/Time: {dt_str}
+- Water temp: {cond.get('water_temp_f', '?')}°F | Trend: {cond.get('temp_trend_label', '?')}
+- Pressure: {cond.get('pressure_hpa', '?')} hPa — {cond.get('pressure_trend', '?')}
+- Wind: {cond.get('wind_speed_mph', '?')} mph {cond.get('wind_dir_label', '')}
+- Sky: {cond.get('conditions', '?')}, {cond.get('cloud_cover_pct', '?')}% cloud
+- Thermocline: {thermo_str} | Clarity: {cond.get('clarity_label', '?')}
+- Target depth: {ctx.get('depth_info', {}).get('target_depth_ft', '?')}ft ({ctx.get('depth_info', {}).get('mode', '?')})
+- Forage: {ctx.get('forage', 'round goby')} | Techniques: {', '.join(ctx.get('techniques') or ['tube jig', 'drop-shot'])}
+- Spawn phase: {ctx.get('spawn', {}).get('label', '?')}
+- Factor scores: temp={bd.get('water_temp')} | pressure={bd.get('pressure')} | wind={bd.get('wind')} | monthly={bd.get('monthly_qual')} | time={bd.get('time_of_day')}
+
+YOUR PRIOR GUIDE BRIEF (what you already told this angler):
+{brief_str}
+
+You are continuing this conversation. Answer questions directly and specifically — build on your brief, give precise tactical advice, and reference the conditions and biology you already analyzed. Be conversational but expert. If asked about something outside this fishery/session, briefly redirect to what's relevant here. Keep responses focused — 2–5 sentences unless a longer answer is genuinely warranted."""
+
+    # Build message list for Claude (filter to valid roles only)
+    claude_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in req.messages
+        if m.get("role") in ("user", "assistant") and m.get("content", "").strip()
+    ]
+
+    message = client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=400,
+        system=system,
+        messages=claude_messages,
+    )
+    return {"reply": message.content[0].text}
+
+
 @app.get("/api/forecast")
 def get_forecast(date: str):
     """

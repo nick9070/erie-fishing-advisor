@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import CatchLogModal from './CatchLogModal'
+import ChatModal from './ChatModal'
 import { distanceKm } from '../hooks/useGeolocation'
 
 function getScoreColor(score) {
@@ -54,12 +55,13 @@ function FactorPill({ label, value }) {
   )
 }
 
-function ForecastSpotRow({ spot, apiBase, conditions, userLocation }) {
+function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour }) {
   const [expanded,       setExpanded]       = useState(false)
   const [aiText,         setAiText]         = useState(null)
   const [aiLoad,         setAiLoad]         = useState(false)
   const [aiError,        setAiError]        = useState(null)
   const [catchModalOpen, setCatchModalOpen] = useState(false)
+  const [chatOpen,       setChatOpen]       = useState(false)
   const [justLogged,     setJustLogged]     = useState(false)
 
   const color = getScoreColor(spot.score)
@@ -250,11 +252,42 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation }) {
                   <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>{sec.body}</p>
                 </div>
               ))}
+              {aiText && (
+                <button
+                  style={{ marginTop: 10, width: '100%', background: '#0c2a3e', border: '1px solid #38bdf8', color: '#38bdf8', borderRadius: 6, padding: '8px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  onClick={e => { e.stopPropagation(); setChatOpen(true) }}
+                >
+                  💬 Chat with AI Guide
+                </button>
+              )}
             </div>
 
           </div>
         )}
       </div>
+
+      {chatOpen && (
+        <ChatModal
+          context={{
+            spot_name:  spot.spot_name,
+            score:      spot.score,
+            rating:     spot.rating,
+            season:     spot.season ?? 'unknown',
+            date,
+            hour,
+            conditions: conditions ?? {},
+            breakdown:  spot.breakdown,
+            bonuses:    spot.bonuses ?? null,
+            depth_info: spot.depth_info ?? null,
+            techniques: spot.techniques ?? null,
+            forage:     spot.forage ?? null,
+            spawn:      spot.spawn ?? null,
+            sections:   aiText,
+          }}
+          apiBase={apiBase}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
 
       {catchModalOpen && (
         <CatchLogModal
@@ -392,6 +425,8 @@ export default function ForecastView({ apiBase, spotsData, userLocation }) {
                   apiBase={apiBase}
                   conditions={nowConditions}
                   userLocation={userLocation}
+                  date={new Date().toISOString().split('T')[0]}
+                  hour={null}
                 />
               ))}
             </>
@@ -506,6 +541,8 @@ export default function ForecastView({ apiBase, spotsData, userLocation }) {
                       apiBase={apiBase}
                       conditions={hourObj.conditions}
                       userLocation={userLocation}
+                      date={selectedDate}
+                      hour={selectedHour}
                     />
                   ))}
                 </div>
