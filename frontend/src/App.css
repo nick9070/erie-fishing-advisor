@@ -200,6 +200,36 @@ body {
   border-left: 1px solid #1e3a4a;
 }
 
+/* ── Desktop panel toggle (forecast / chats) ── */
+.panel-toggle {
+  display: flex;
+  flex-shrink: 0;
+  background: #0a1a2a;
+  border-bottom: 1px solid #1e3a4a;
+}
+
+.panel-toggle-btn {
+  flex: 1;
+  padding: 9px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.panel-toggle-btn.active {
+  color: #38bdf8;
+  border-bottom-color: #38bdf8;
+}
+
+@media (max-width: 700px) {
+  .panel-toggle { display: none; }
+}
+
 /* ── Mobile tabs ── */
 .mobile-tabs {
   display: none;

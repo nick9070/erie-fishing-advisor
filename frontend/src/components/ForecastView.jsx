@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
 import CatchLogModal from './CatchLogModal'
-import ChatModal from './ChatModal'
 import { distanceKm } from '../hooks/useGeolocation'
 
 function getScoreColor(score) {
@@ -55,13 +54,12 @@ function FactorPill({ label, value }) {
   )
 }
 
-function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour }) {
+function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour, onNewChat }) {
   const [expanded,       setExpanded]       = useState(false)
   const [aiText,         setAiText]         = useState(null)
   const [aiLoad,         setAiLoad]         = useState(false)
   const [aiError,        setAiError]        = useState(null)
   const [catchModalOpen, setCatchModalOpen] = useState(false)
-  const [chatOpen,       setChatOpen]       = useState(false)
   const [justLogged,     setJustLogged]     = useState(false)
 
   const color = getScoreColor(spot.score)
@@ -255,7 +253,25 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour }
               {aiText && (
                 <button
                   style={{ marginTop: 10, width: '100%', background: '#0c2a3e', border: '1px solid #38bdf8', color: '#38bdf8', borderRadius: 6, padding: '8px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                  onClick={e => { e.stopPropagation(); setChatOpen(true) }}
+                  onClick={e => {
+                    e.stopPropagation()
+                    onNewChat({
+                      spot_name:  spot.spot_name,
+                      score:      spot.score,
+                      rating:     spot.rating,
+                      season:     spot.season ?? 'unknown',
+                      date,
+                      hour,
+                      conditions: conditions ?? {},
+                      breakdown:  spot.breakdown,
+                      bonuses:    spot.bonuses ?? null,
+                      depth_info: spot.depth_info ?? null,
+                      techniques: spot.techniques ?? null,
+                      forage:     spot.forage ?? null,
+                      spawn:      spot.spawn ?? null,
+                      sections:   aiText,
+                    })
+                  }}
                 >
                   💬 Chat with AI Guide
                 </button>
@@ -265,29 +281,6 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour }
           </div>
         )}
       </div>
-
-      {chatOpen && (
-        <ChatModal
-          context={{
-            spot_name:  spot.spot_name,
-            score:      spot.score,
-            rating:     spot.rating,
-            season:     spot.season ?? 'unknown',
-            date,
-            hour,
-            conditions: conditions ?? {},
-            breakdown:  spot.breakdown,
-            bonuses:    spot.bonuses ?? null,
-            depth_info: spot.depth_info ?? null,
-            techniques: spot.techniques ?? null,
-            forage:     spot.forage ?? null,
-            spawn:      spot.spawn ?? null,
-            sections:   aiText,
-          }}
-          apiBase={apiBase}
-          onClose={() => setChatOpen(false)}
-        />
-      )}
 
       {catchModalOpen && (
         <CatchLogModal
@@ -315,7 +308,7 @@ function bonusChip(type) {
   }
 }
 
-export default function ForecastView({ apiBase, spotsData, userLocation }) {
+export default function ForecastView({ apiBase, spotsData, userLocation, onNewChat }) {
   const [nowMode,      setNowMode]      = useState(true)
   const [selectedDate, setSelectedDate] = useState(() => getDateStr(0))
   const [forecast,     setForecast]     = useState(null)
@@ -427,6 +420,7 @@ export default function ForecastView({ apiBase, spotsData, userLocation }) {
                   userLocation={userLocation}
                   date={new Date().toISOString().split('T')[0]}
                   hour={null}
+                  onNewChat={onNewChat}
                 />
               ))}
             </>
@@ -543,6 +537,7 @@ export default function ForecastView({ apiBase, spotsData, userLocation }) {
                       userLocation={userLocation}
                       date={selectedDate}
                       hour={selectedHour}
+                      onNewChat={onNewChat}
                     />
                   ))}
                 </div>
