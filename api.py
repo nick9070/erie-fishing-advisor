@@ -712,3 +712,14 @@ def get_forecast(date: str):
 def health():
     return {"status": "ok", "time": datetime.datetime.now().isoformat()}
 
+
+@app.get("/api/debug-forecast")
+def debug_forecast():
+    import traceback, datetime as dt
+    try:
+        date = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+        hourly_wx = get_open_meteo_hourly(LAKE_CENTER_LAT, LAKE_CENTER_LON, date)
+        return {"ok": True, "hours": len(hourly_wx)}
+    except Exception as e:
+        return {"error": str(e), "trace": traceback.format_exc()}
+
