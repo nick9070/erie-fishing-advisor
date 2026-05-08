@@ -249,7 +249,7 @@
   {
     "id": "upper_niagara_canadian",
     "name": "Upper Niagara River (Canadian Side)",
-    "coords": { "lat": 43.042, "lon": -79.052 },
+    "coords": { "lat": 43.042, "lon": -79.020 },
     "depth_range": [8, 28],
     "structure": "rocky_reef",
     "best_seasons": ["summer", "fall", "post_spawn"],
