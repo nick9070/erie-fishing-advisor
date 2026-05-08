@@ -7,9 +7,20 @@ in water_temp.py. Open-Meteo is used here for cloud cover, sky conditions,
 and as a fallback when buoys are offline.
 """
 
+import time
 import requests
 
 OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast"
+
+
+def _open_meteo_get(params: dict, timeout: int = 15) -> dict:
+    """Wrapper around Open-Meteo GET with one retry on 429 (rate-limit)."""
+    resp = requests.get(OPEN_METEO_BASE, params=params, timeout=timeout)
+    if resp.status_code == 429:
+        time.sleep(2)
+        resp = requests.get(OPEN_METEO_BASE, params=params, timeout=timeout)
+    resp.raise_for_status()
+    return resp.json()
 
 # WMO weather interpretation codes → human-readable description
 WMO_CODES = {
@@ -56,9 +67,8 @@ def get_open_meteo(lat: float, lon: float) -> dict:
         "timezone":           "auto",
     }
     try:
-        resp = requests.get(OPEN_METEO_BASE, params=params, timeout=10)
-        resp.raise_for_status()
-        curr  = resp.json()["current"]
+        data_json = _open_meteo_get(params, timeout=10)
+        curr  = data_json["current"]
         wcode = curr.get("weather_code", 0)
         return {
             "temp_f":          round(curr.get("temperature_2m", 60), 1),
@@ -110,9 +120,7 @@ def get_open_meteo_hourly(lat: float, lon: float, date_str: str) -> list:
         "start_date":         date_str,
         "end_date":           date_str,
     }
-    resp = requests.get(OPEN_METEO_BASE, params=params, timeout=15)
-    resp.raise_for_status()
-    data      = resp.json()["hourly"]
+    data      = _open_meteo_get(params, timeout=15)["hourly"]
     pressures = data["surface_pressure"]
 
     hours = []
@@ -323,9 +331,8 @@ def get_past_wind(lat: float, lon: float, hours: int = 24) -> list:
             "past_days":       2,
             "forecast_days":   0,
         }
-        resp = requests.get(OPEN_METEO_BASE, params=params, timeout=10)
-        resp.raise_for_status()
-        data   = resp.json()["hourly"]
+        _om_json = _open_meteo_get(params, timeout=10)
+        data   = _om_json["hourly"]
         dirs   = data["wind_direction_10m"]
         speeds = data["wind_speed_10m"]
         result = [

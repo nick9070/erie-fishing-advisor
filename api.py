@@ -712,32 +712,3 @@ def get_forecast(date: str):
 def health():
     return {"status": "ok", "time": datetime.datetime.now().isoformat()}
 
-
-@app.get("/api/debug-forecast")
-def debug_forecast():
-    import traceback, datetime as dt
-    try:
-        date = (dt.date.today() + dt.timedelta(days=1)).isoformat()
-        req_date = dt.date.fromisoformat(date)
-        buoy = get_buoy_conditions(LAKE_CENTER_LAT, LAKE_CENTER_LON)
-        water_temp_f = buoy.get("water_temp_f")
-        hourly_wx = get_open_meteo_hourly(LAKE_CENTER_LAT, LAKE_CENTER_LON, date)
-        spots = _load_spots()
-        wind_history = get_past_wind(LAKE_CENTER_LAT, LAKE_CENTER_LON, hours=24)
-        hw = hourly_wx[0]
-        conditions = {
-            "water_temp_f": water_temp_f,
-            "pressure_hpa": hw["pressure_hpa"],
-            "pressure_trend": hw["pressure_trend"],
-            "wind_speed_mph": hw["wind_speed_mph"],
-            "wind_dir_label": hw["wind_dir_label"],
-            "cloud_cover_pct": hw["cloud_cover_pct"],
-            "conditions": hw["conditions"],
-            "temp_f": hw["temp_f"],
-            "wind_history": wind_history,
-        }
-        hour_dt = dt.datetime(req_date.year, req_date.month, req_date.day, hour=0)
-        ranked = rank_spots(spots, conditions, hour_dt)
-        return {"ok": True, "spots": len(ranked), "first_keys": list(ranked[0].keys())}
-    except Exception as e:
-        return {"error": str(e), "trace": traceback.format_exc()}
