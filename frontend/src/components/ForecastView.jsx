@@ -95,7 +95,7 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation }) {
       }),
     })
       .then(r => r.json())
-      .then(data => { if (!cancelled) setAiText(data.explanation) })
+      .then(data => { if (!cancelled) setAiText(data.sections ?? null) })
       .catch(() => { if (!cancelled) setAiError('Could not load AI explanation.') })
       .finally(() => { if (!cancelled) setAiLoad(false) })
     return () => { cancelled = true }
@@ -241,10 +241,15 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation }) {
 
             {/* AI Guide */}
             <div style={{ background: '#071520', border: '1px solid #1e3a4a', borderRadius: 6, padding: '10px 12px' }}>
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>🤖 AI Guide</div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>🤖 AI Guide</div>
               {aiLoad  && <p style={{ fontSize: 12, color: '#64748b', margin: 0 }}>⟳ Analyzing conditions...</p>}
               {aiError && <p style={{ fontSize: 11, color: '#f87171', margin: 0 }}>{aiError}</p>}
-              {aiText  && <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>{aiText}</p>}
+              {aiText  && aiText.map((sec, i) => (
+                <div key={i} style={{ marginBottom: i < aiText.length - 1 ? 10 : 0 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 3 }}>{sec.title}</div>
+                  <p style={{ fontSize: 12, color: '#cbd5e1', lineHeight: 1.6, margin: 0 }}>{sec.body}</p>
+                </div>
+              ))}
             </div>
 
           </div>

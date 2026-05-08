@@ -56,7 +56,7 @@ function AiExplain({ spot, conditions, apiBase }) {
       }),
     })
       .then(r => r.json())
-      .then(data => { if (!cancelled) setText(data.explanation) })
+      .then(data => { if (!cancelled) setText(data.sections ?? null) })
       .catch(() => { if (!cancelled) setError('Could not load AI explanation.') })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
@@ -67,7 +67,12 @@ function AiExplain({ spot, conditions, apiBase }) {
       <div className="ai-label">🤖 AI Guide</div>
       {loading && <p className="ai-text" style={{ color: '#64748b' }}>⟳ Analyzing conditions...</p>}
       {error   && <p className="ai-text" style={{ color: '#f87171', fontSize: 11 }}>{error}</p>}
-      {text    && <p className="ai-text">{text}</p>}
+      {text    && text.map((sec, i) => (
+        <div key={i} style={{ marginBottom: i < text.length - 1 ? 10 : 0 }}>
+          <div className="ai-section-title">{sec.title}</div>
+          <p className="ai-text" style={{ margin: 0 }}>{sec.body}</p>
+        </div>
+      ))}
     </div>
   )
 }
@@ -434,6 +439,7 @@ const styles = `
   border-radius: 6px;
   padding: 10px 12px;
 }
-.ai-label { font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.ai-label { font-size: 10px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.ai-section-title { font-size: 10px; font-weight: 700; color: #7dd3fc; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 3px; }
 .ai-text { font-size: 12px; color: #cbd5e1; line-height: 1.6; }
 `

@@ -451,7 +451,15 @@ def explain_spot(req: ExplainRequest):
         modifier_notes.append("multi-day cooling trend — fish shutting down")
     modifiers_str = " | ".join(modifier_notes) if modifier_notes else "no significant suppression active"
 
-    prompt = f"""You are an expert Lake Erie smallmouth bass fishing guide for the Ontario eastern basin. Write a 5-sentence natural-language brief that explains what the bass are doing right now, grounded in biology and this fishery's specific characteristics.
+    prompt = f"""You are an expert Lake Erie smallmouth bass fishing guide for the Ontario eastern basin.
+
+Return a JSON object with exactly these three keys. Each value is 2–3 sentences of sharp, specific guide analysis. No fluff.
+
+{{
+  "what_theyre_doing": "Where bass are in their seasonal cycle and what's driving their feeding state right now — reference temp trend, spawn phase, pressure system biology, or seasonal migration.",
+  "where_to_find_them": "Precise depth, zone, and structural position at this spot — thermocline compression, goby depth distribution, current seams, clarity effects on light-sensitivity and how deep fish push.",
+  "how_to_fish_it": "Exact presentation: specific lure, weight, hook size, line weight, retrieve. One immediate timing note — first-light window, solunar peak, wind shift, or condition the angler should act on now."
+}}
 
 SPOT: {req.spot_name}
 SCORE: {req.score}/100 ({req.rating}) | SEASON: {req.season.replace('_', ' ')}
@@ -464,31 +472,42 @@ CONDITIONS:
 - Thermocline: {thermo_str}
 - Water clarity: {clarity_str}
 - Current: {current_str}
-- Spawn phase: {spawn.get('label', cond.get('spawn_label', 'active'))}
+- Spawn phase: {spawn.get('label', cond.get('spawn_label', 'unknown'))}
 
 KEY MODIFIERS: {modifiers_str}
 
 DEPTH TARGET: {depth_str}
 FORAGE: {forage.replace('_', ' ')} | TECHNIQUES: {', '.join(techniques) if techniques else 'tube jig, drop-shot'}
 SOLUNAR: {sol.get('active_period', 'inactive')} (moon {sol.get('moon_phase_pct', '?')}%)
-
 FACTOR SCORES: temp={bd.get('water_temp')} | pressure={bd.get('pressure')} | wind={bd.get('wind')} | monthly={bd.get('monthly_qual')} | time={bd.get('time_of_day')}
 
-Write 5 sentences covering:
-1. Where bass are in their seasonal movement cycle right now and what's driving their feeding state — reference temperature trend, spawn phase, or seasonal migration as appropriate.
-2. How the pressure system and wind are affecting bass behavior at this spot specifically — include the biological mechanism (feeding lane creation, forage concentration, post-front suppression).
-3. The structural and biological reasons this spot works or doesn't in these conditions — thermocline positioning, goby availability by depth, current influence on feeding posture, water clarity effects on light-sensitivity.
-4. Precise depth, zone, and presentation for this hour — be specific (e.g. "work the 14–18ft rock edge with a drop-shot, 2/0 hook, 10lb fluoro").
-5. One timing or tactical note the angler should act on immediately — e.g. first-light window closing, solunar peak approaching, wind building.
+Write in the voice of a knowledgeable guide talking to a serious angler. Let real biology show naturally (Brownscombe 2024 thermocline use; Suski & Ridgway 2009 dawn shallow movement; eastern basin goby diet >70%; spawns 2–3 weeks later than western basin). Be specific and direct — no filler.
 
-Write in the voice of a knowledgeable guide talking to a serious angler. Reference real biology (Brownscombe 2024 on thermocline use; Suski & Ridgway 2009 on dawn shallow movement; eastern basin goby diet >70%; eastern basin spawns 2–3 weeks later than western) where it fits naturally — don't force citations, just let the knowledge show. No bullet points. No headers. Flowing prose."""
+Return ONLY the JSON object. No markdown fences, no text outside the JSON."""
 
     message = client.messages.create(
         model="claude-sonnet-4-6",
-        max_tokens=550,
+        max_tokens=600,
         messages=[{"role": "user", "content": prompt}]
     )
-    return {"explanation": message.content[0].text}
+
+    raw = message.content[0].text.strip()
+    # Strip markdown fences if present
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+    try:
+        import json as _json
+        parsed = _json.loads(raw)
+        sections = [
+            {"title": "What the fish are doing",  "body": parsed.get("what_theyre_doing", "")},
+            {"title": "Where to find them",        "body": parsed.get("where_to_find_them", "")},
+            {"title": "How to fish it",            "body": parsed.get("how_to_fish_it", "")},
+        ]
+        return {"sections": sections}
+    except Exception:
+        # Fallback: return raw text as a single section
+        return {"sections": [{"title": "AI Guide", "body": raw}]}
 
 
 @app.get("/api/forecast")
