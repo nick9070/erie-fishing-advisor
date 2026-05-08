@@ -97,24 +97,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div className="header-left">
-          <span className="app-icon">🎣</span>
-          <div>
-            <h1>Erie Smallmouth Advisor</h1>
-            {lastUpdated && <span className="last-updated">Updated {lastUpdated.toLocaleTimeString()}</span>}
-          </div>
-        </div>
-        <div className="header-right">
-          {location && <span className="gps-badge" title={`±${Math.round(location.accuracy)}m`}>📍 GPS</span>}
-          {spotsData && <span className="season-badge">{seasonLabel}</span>}
-          <button className="refresh-btn" onClick={fetchData} disabled={loading}>
-            {loading ? '⟳' : '⟳ Refresh'}
-          </button>
-        </div>
-      </header>
-
-      {error && (
+{error && (
         <div className="error-banner">
           ⚠ {error}
           {error.includes('OPENWEATHER') && (

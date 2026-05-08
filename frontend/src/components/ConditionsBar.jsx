@@ -131,26 +131,8 @@ export default function ConditionsBar({ conditions, season }) {
         )}
       </div>
 
-      {buoy_name && (
-        <div className="data-source-bar">
-          📡 On-lake data: NOAA NDBC {buoy_name} · Sky: Open-Meteo (ECMWF)
-          {thermocline_stratified && thermocline_note ? ` · ${thermocline_note}` : ''}
-        </div>
-      )}
 
-      {shallowBite.active && (
-        <div className={`shallow-bite-banner ${shallowBite.strength}`}>
-          <span className="shallow-bite-icon">🌅</span>
-          <div>
-            <span className="shallow-bite-title">
-              {shallowBite.strength === 'strong' ? 'Prime Shallow Bite Window' : 'Shallow Bite Active'}
-            </span>
-            <span className="shallow-bite-reason"> — {shallowBite.reason}</span>
-          </div>
-        </div>
-      )}
-
-      <style>{styles}</style>
+<style>{styles}</style>
     </div>
   )
 }
