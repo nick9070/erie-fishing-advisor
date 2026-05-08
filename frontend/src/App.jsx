@@ -142,7 +142,7 @@ export default function App() {
                 key={mapKey}
                 spots={spotsData.spots}
                 selectedSpot={selectedSpot}
-                onSelectSpot={(spot) => { setSelectedSpot(spot); setMobileTab('list') }}
+                onSelectSpot={setSelectedSpot}
                 userLocation={location}
               />
             ) : loading ? (

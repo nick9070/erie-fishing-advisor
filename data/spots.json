@@ -21,7 +21,7 @@
   {
     "id": "long_point_inner_bay",
     "name": "Long Point Inner Bay (Pottahawk Pt)",
-    "coords": { "lat": 42.598, "lon": -80.471 },
+    "coords": { "lat": 42.618, "lon": -80.448 },
     "depth_range": [4, 18],
     "structure": "rock_and_gravel",
     "best_seasons": ["spawn", "pre_spawn", "summer"],
@@ -78,7 +78,7 @@
   {
     "id": "turkey_point",
     "name": "Turkey Point Reef",
-    "coords": { "lat": 42.635, "lon": -80.510 },
+    "coords": { "lat": 42.605, "lon": -80.515 },
     "depth_range": [6, 25],
     "structure": "rocky_shoal",
     "best_seasons": ["pre_spawn", "spawn", "summer", "fall"],

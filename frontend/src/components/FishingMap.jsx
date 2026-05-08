@@ -1,23 +1,9 @@
 import { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, WMSTileLayer, CircleMarker, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, WMSTileLayer, CircleMarker, Tooltip, Popup, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 
 const MAP_CENTER = [42.80, -79.80]
 const MAP_ZOOM   = 9
-
-const BOAT_LAUNCHES = [
-  { name: 'Port Dover',              lat: 42.786, lon: -80.202 },
-  { name: 'Nanticoke',               lat: 42.818, lon: -80.062 },
-  { name: 'Selkirk',                 lat: 42.847, lon: -79.882 },
-  { name: 'Peacock Point',           lat: 42.834, lon: -79.827 },
-  { name: 'Rock Point Prov. Park',   lat: 42.843, lon: -79.668 },
-  { name: 'Port Maitland',           lat: 42.869, lon: -79.576 },
-  { name: 'Dunnville (Stromness)',   lat: 42.868, lon: -79.620 },
-  { name: 'Port Colborne',           lat: 42.883, lon: -79.250 },
-  { name: 'Crystal Beach',           lat: 42.873, lon: -79.060 },
-  { name: 'Fort Erie (Niagara)',     lat: 42.900, lon: -78.928 },
-  { name: 'Turkey Point Prov. Park', lat: 42.694, lon: -80.330 },
-]
 
 function getScoreColor(score) {
   if (score >= 80) return '#22c55e'
@@ -112,6 +98,7 @@ export default function FishingMap({ spots, selectedSpot, onSelectSpot, userLoca
   const [baseLayer,    setBaseLayer]    = useState('osm')
   const [showCHS,      setShowCHS]      = useState(false)
   const [showSeamarks, setShowSeamarks] = useState(false)
+  const [activePopup,  setActivePopup]  = useState(null)
 
   return (
     <MapContainer
@@ -155,7 +142,7 @@ export default function FishingMap({ spots, selectedSpot, onSelectSpot, userLoca
       {/* Fishing spots */}
       {spots.map(spot => {
         const color      = getScoreColor(spot.score)
-        const isSelected = selectedSpot?.spot_id === spot.spot_id
+        const isSelected = activePopup === spot.spot_id
         const shallow    = spot.shallow_bite?.active
         return (
           <CircleMarker
@@ -168,52 +155,36 @@ export default function FishingMap({ spots, selectedSpot, onSelectSpot, userLoca
               fillOpacity: 0.85,
               weight:      isSelected ? 3 : 1.5,
             }}
-            eventHandlers={{ click: () => onSelectSpot(spot) }}
+            eventHandlers={{ click: () => setActivePopup(spot.spot_id) }}
           >
-            <Tooltip direction="top" offset={[0, -8]} opacity={0.95}>
-              <div style={{ minWidth: 170 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>{spot.spot_name}</div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-                  <span style={{ color }}>{spot.rating}</span>
-                  <span style={{ fontWeight: 700 }}>{spot.score}/100</span>
+            {isSelected && (
+              <Popup
+                offset={[0, -8]}
+                onClose={() => setActivePopup(null)}
+              >
+                <div style={{ minWidth: 180, fontFamily: 'system-ui, sans-serif' }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 5, color: '#0f1923' }}>{spot.spot_name}</div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                    <span style={{ color, fontWeight: 700 }}>{spot.rating}</span>
+                    <span style={{ fontWeight: 800, fontSize: 15, color: '#0f1923' }}>{spot.score}/100</span>
+                  </div>
+                  {spot.depth_info?.target_depth_ft && (
+                    <div style={{ fontSize: 11, color: shallow ? '#b45309' : '#475569', marginBottom: 3 }}>
+                      {shallow ? '🌅' : '🎯'} Target: {spot.depth_info.target_depth_ft[0]}–{spot.depth_info.target_depth_ft[1]} ft
+                    </div>
+                  )}
+                  {spot.solunar?.active_period && spot.solunar.active_period !== 'inactive' && (
+                    <div style={{ color: '#92400e', fontSize: 11 }}>
+                      ★ {spot.solunar.active_period}
+                    </div>
+                  )}
                 </div>
-                {spot.depth_info?.target_depth_ft && (
-                  <div style={{ fontSize: 11, color: shallow ? '#fde68a' : '#94a3b8', marginTop: 3 }}>
-                    {shallow ? '🌅' : '🎯'} {spot.depth_info.target_depth_ft[0]}–{spot.depth_info.target_depth_ft[1]} ft
-                  </div>
-                )}
-                {spot.solunar?.active_period && spot.solunar.active_period !== 'inactive' && (
-                  <div style={{ color: '#facc15', marginTop: 3, fontSize: 11 }}>
-                    ★ {spot.solunar.active_period}
-                  </div>
-                )}
-              </div>
-            </Tooltip>
+              </Popup>
+            )}
           </CircleMarker>
         )
       })}
 
-      {/* Boat launches */}
-      {BOAT_LAUNCHES.map(launch => (
-        <CircleMarker
-          key={launch.name}
-          center={[launch.lat, launch.lon]}
-          radius={7}
-          pathOptions={{
-            color:       '#38bdf8',
-            fillColor:   '#0d1f2d',
-            fillOpacity: 0.9,
-            weight:      2,
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -6]} opacity={0.95}>
-            <div style={{ minWidth: 130 }}>
-              <div style={{ fontWeight: 700 }}>⚓ {launch.name}</div>
-              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 2 }}>Boat Launch</div>
-            </div>
-          </Tooltip>
-        </CircleMarker>
-      ))}
 
       {/* User location dot */}
       {userLocation && (
@@ -259,10 +230,6 @@ export default function FishingMap({ spots, selectedSpot, onSelectSpot, userLoca
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4 }}>
           <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#3b82f6', flexShrink: 0 }} />
           <span style={{ fontSize: 11, color: '#cbd5e1' }}>You</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
-          <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#0d1f2d', border: '2px solid #38bdf8', flexShrink: 0 }} />
-          <span style={{ fontSize: 11, color: '#cbd5e1' }}>Boat Launch</span>
         </div>
       </div>
     </MapContainer>
