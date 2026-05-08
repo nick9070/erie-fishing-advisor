@@ -8,19 +8,38 @@ and as a fallback when buoys are offline.
 """
 
 import time
+import datetime
 import requests
 
 OPEN_METEO_BASE = "https://api.open-meteo.com/v1/forecast"
 
+# Module-level cache keyed by (date_str, call_type) — survives within a single
+# Render instance lifetime. Prevents redundant calls when the api.py cache is
+# cold (e.g. right after restart) and also absorbs rapid repeated hits.
+_om_cache: dict = {}
+_OM_CACHE_TTL = 600  # 10 minutes
 
-def _open_meteo_get(params: dict, timeout: int = 15) -> dict:
-    """Wrapper around Open-Meteo GET with one retry on 429 (rate-limit)."""
+
+def _open_meteo_get(params: dict, timeout: int = 15, cache_key: str = "") -> dict:
+    """GET Open-Meteo with module-level caching and one retry on 429."""
+    if cache_key:
+        entry = _om_cache.get(cache_key)
+        if entry and datetime.datetime.now() < entry["expires"]:
+            return entry["data"]
+
     resp = requests.get(OPEN_METEO_BASE, params=params, timeout=timeout)
     if resp.status_code == 429:
-        time.sleep(2)
+        time.sleep(10)
         resp = requests.get(OPEN_METEO_BASE, params=params, timeout=timeout)
     resp.raise_for_status()
-    return resp.json()
+    data = resp.json()
+
+    if cache_key:
+        _om_cache[cache_key] = {
+            "data": data,
+            "expires": datetime.datetime.now() + datetime.timedelta(seconds=_OM_CACHE_TTL),
+        }
+    return data
 
 # WMO weather interpretation codes → human-readable description
 WMO_CODES = {
@@ -67,7 +86,7 @@ def get_open_meteo(lat: float, lon: float) -> dict:
         "timezone":           "auto",
     }
     try:
-        data_json = _open_meteo_get(params, timeout=10)
+        data_json = _open_meteo_get(params, timeout=10, cache_key="current")
         curr  = data_json["current"]
         wcode = curr.get("weather_code", 0)
         return {
@@ -120,7 +139,7 @@ def get_open_meteo_hourly(lat: float, lon: float, date_str: str) -> list:
         "start_date":         date_str,
         "end_date":           date_str,
     }
-    data      = _open_meteo_get(params, timeout=15)["hourly"]
+    data      = _open_meteo_get(params, timeout=15, cache_key=f"hourly:{date_str}")["hourly"]
     pressures = data["surface_pressure"]
 
     hours = []
@@ -331,7 +350,7 @@ def get_past_wind(lat: float, lon: float, hours: int = 24) -> list:
             "past_days":       2,
             "forecast_days":   0,
         }
-        _om_json = _open_meteo_get(params, timeout=10)
+        _om_json = _open_meteo_get(params, timeout=10, cache_key="wind_history")
         data   = _om_json["hourly"]
         dirs   = data["wind_direction_10m"]
         speeds = data["wind_speed_10m"]
