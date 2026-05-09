@@ -30,7 +30,7 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: /\/api\/(spots|conditions)/,
+            urlPattern: /\/api\/(spots|conditions|forecast)/,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'api-cache',

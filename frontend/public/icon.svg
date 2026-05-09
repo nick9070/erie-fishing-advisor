@@ -1,19 +1,156 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="72%">
+      <stop offset="0%" stop-color="#142e42"/>
+      <stop offset="100%" stop-color="#040d14"/>
+    </radialGradient>
+    <!-- Back=dark olive, flank=bronze, belly=cream-gold -->
+    <linearGradient id="body" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%"   stop-color="#5a4808"/>
+      <stop offset="30%"  stop-color="#a87818"/>
+      <stop offset="65%"  stop-color="#c89830"/>
+      <stop offset="100%" stop-color="#e8d080"/>
+    </linearGradient>
+    <linearGradient id="dfin" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%"   stop-color="#8a6010"/>
+      <stop offset="100%" stop-color="#c0980e"/>
+    </linearGradient>
+    <linearGradient id="head" x1="100%" y1="0%" x2="0%" y2="0%">
+      <stop offset="0%"   stop-color="#9a6810"/>
+      <stop offset="100%" stop-color="#6a4808"/>
+    </linearGradient>
+  </defs>
+
   <!-- Background -->
-  <rect width="512" height="512" rx="80" fill="#0d1f2d"/>
-  <!-- Water -->
-  <ellipse cx="256" cy="370" rx="200" ry="40" fill="#0ea5e9" opacity="0.25"/>
-  <!-- Fish body -->
-  <ellipse cx="240" cy="256" rx="110" ry="58" fill="#38bdf8"/>
-  <!-- Fish tail -->
-  <polygon points="360,256 410,210 410,302" fill="#0ea5e9"/>
-  <!-- Fish eye -->
-  <circle cx="170" cy="245" r="14" fill="#0d1f2d"/>
-  <circle cx="167" cy="242" r="5" fill="white"/>
-  <!-- Fishing line -->
-  <line x1="256" y1="60" x2="256" y2="190" stroke="#94a3b8" stroke-width="3" stroke-dasharray="6,4"/>
-  <!-- Hook -->
-  <path d="M256 190 Q256 230 235 240" stroke="#facc15" stroke-width="4" fill="none" stroke-linecap="round"/>
-  <!-- Rod tip suggestion -->
-  <circle cx="256" cy="58" r="6" fill="#facc15"/>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- Water shimmer -->
+  <ellipse cx="256" cy="446" rx="188" ry="17" fill="#0ea5e9" opacity="0.24"/>
+
+  <!--
+    Fish geometry (centre y=268):
+    Body: x=118–424, y=216–320  (306px × 104px → ratio 2.9:1)
+    Dorsal spines peak at y≈94
+    Head/jaw: x≈56
+    Tail tips: x≈480, y 202–334
+  -->
+
+  <!-- TAIL (drawn first) -->
+  <path d="M 424,234 L 480,197 L 464,262 L 482,268 L 464,274 L 480,339 L 424,306 Z"
+    fill="#7a5210"/>
+  <path d="M 480,197 L 452,268 L 480,339"
+    stroke="#050e18" stroke-width="13" fill="none" stroke-linejoin="round"/>
+
+  <!-- BODY — elongated teardrop, deepest near head, tapers to tail -->
+  <path d="
+    M 176,216
+    C 218,206 260,200 302,200
+    C 344,200 380,210 402,228
+    C 418,240 424,254 424,268
+    C 424,282 418,296 402,308
+    C 380,326 344,336 302,336
+    C 260,336 218,330 176,320
+    C 150,314 132,300 122,284
+    C 116,274 116,262 122,252
+    C 132,236 150,222 176,216
+    Z
+  " fill="url(#body)"/>
+
+  <!-- Dark back overlay (makes top-to-bottom gradient more realistic) -->
+  <path d="
+    M 176,216
+    C 218,206 260,200 302,200
+    C 344,200 380,210 402,228
+    L 408,236
+    C 385,218 350,208 308,208
+    C 266,208 224,212 182,220
+    Z
+  " fill="#4a3a08" opacity="0.55"/>
+
+  <!-- HEAD -->
+  <path d="
+    M 176,216
+    C 158,216 142,214 126,206
+    C 108,218 96,236 86,254
+    C 78,268 76,276 78,284
+    C 80,298 92,314 108,324
+    C 122,334 140,336 158,332
+    C 166,330 172,326 176,320
+    C 150,314 132,300 122,284
+    C 116,274 116,262 122,252
+    C 132,236 150,222 176,216
+    Z
+  " fill="url(#head)"/>
+
+  <!-- Forehead / pre-operculum bump -->
+  <path d="
+    M 126,206 C 110,198 98,202 90,212 C 84,220 82,232 86,244 C 90,236 96,228 104,222 Z
+  " fill="#5a3c0a"/>
+
+  <!-- Upper jaw snout -->
+  <path d="
+    M 86,254 C 76,260 66,270 60,280 C 62,272 66,264 70,258 Z
+  " fill="#6a4a0c"/>
+
+  <!-- Lower jaw -->
+  <path d="
+    M 78,284 C 74,298 68,308 60,318 L 76,330 C 88,318 98,306 100,290 L 100,284 Z
+  " fill="#5e3e0a"/>
+
+  <!-- SPINY DORSAL FIN — high, prominent, clearly serrated -->
+  <path d="
+    M 194,212
+    L 191,152 L 208,172 L 224,118 L 241,156 L 258,106
+    L 275,150 L 292,100 L 309,144 L 326,114 L 343,148
+    L 358,198
+    Z
+  " fill="url(#dfin)" stroke="#7a5210" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- Spine lines (the serrated look) -->
+  <g stroke="#5a3c08" stroke-width="2.5" fill="none" opacity="0.50">
+    <line x1="191" y1="212" x2="191" y2="152"/>
+    <line x1="208" y1="213" x2="208" y2="172"/>
+    <line x1="224" y1="212" x2="224" y2="118"/>
+    <line x1="241" y1="212" x2="241" y2="156"/>
+    <line x1="258" y1="211" x2="258" y2="106"/>
+    <line x1="275" y1="211" x2="275" y2="150"/>
+    <line x1="292" y1="210" x2="292" y2="100"/>
+    <line x1="309" y1="210" x2="309" y2="144"/>
+    <line x1="326" y1="211" x2="326" y2="114"/>
+    <line x1="343" y1="212" x2="343" y2="148"/>
+  </g>
+
+  <!-- Soft dorsal fin -->
+  <path d="
+    M 358,198 C 370,178 388,164 404,162 C 418,162 426,174 426,192 L 424,228 Z
+  " fill="#9a7014" stroke="#7a5610" stroke-width="2"/>
+
+  <!-- Gill plate arc -->
+  <path d="M 176,216 Q 161,268 176,320" stroke="#4e3006" stroke-width="5.5" fill="none"/>
+
+  <!-- Pectoral fin -->
+  <path d="M 186,280 C 200,300 214,320 216,336 C 228,326 230,306 218,282 Z"
+    fill="#9a7014" opacity="0.82"/>
+
+  <!-- Anal fin (small, behind belly) -->
+  <path d="M 304,336 C 318,352 340,360 352,358 C 352,344 342,334 328,332 Z"
+    fill="#9a7014" opacity="0.72"/>
+
+  <!-- Lateral line (subtle) -->
+  <path d="M 192,264 Q 308,256 422,266"
+    stroke="#4e3006" stroke-width="2.5" fill="none" opacity="0.38"/>
+
+  <!-- Belly shine -->
+  <path d="M 180,308 Q 295,328 418,298"
+    stroke="#f0e080" stroke-width="2" fill="none" opacity="0.18"/>
+
+  <!-- EYE -->
+  <circle cx="142" cy="258" r="26" fill="#080c04"/>
+  <circle cx="142" cy="258" r="20" fill="#1c2a06"/>
+  <circle cx="142" cy="258" r="13" fill="#060904"/>
+  <!-- Golden iris ring -->
+  <circle cx="142" cy="258" r="17" fill="none" stroke="#d0a018" stroke-width="4" opacity="0.80"/>
+  <!-- Catchlight -->
+  <circle cx="134" cy="249" r="6" fill="#f0e050" opacity="0.66"/>
+  <circle cx="148" cy="247" r="3" fill="white" opacity="0.90"/>
+
 </svg>

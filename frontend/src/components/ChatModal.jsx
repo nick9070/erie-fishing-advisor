@@ -23,26 +23,30 @@ function getScoreColor(score) {
 }
 
 export default function ChatModal({ thread, onUpdate, onClose }) {
-  const [minimized, setMinimized] = useState(false)
-  const [input,     setInput]     = useState('')
-  const [loading,   setLoading]   = useState(false)
+  const [minimized,     setMinimized]     = useState(false)
+  const [input,         setInput]         = useState('')
+  const [loading,       setLoading]       = useState(false)
+  const [briefExpanded, setBriefExpanded] = useState(false)
   const bottomRef = useRef(null)
   const inputRef  = useRef(null)
 
   const messages   = thread.messages ?? []
   const scoreColor = getScoreColor(thread.score)
 
-  // Reset minimized when a new thread is loaded
-  useEffect(() => { setMinimized(false) }, [thread.id])
+  // Reset on new thread
+  useEffect(() => { setMinimized(false); setBriefExpanded(false) }, [thread.id])
 
   // Scroll to bottom on new messages
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
-  // Focus input when expanded
+  // Only auto-focus on desktop — on mobile this triggers the keyboard immediately
+  // and causes iOS to zoom the viewport
   useEffect(() => {
-    if (!minimized) inputRef.current?.focus()
+    if (!minimized && window.matchMedia('(pointer: fine)').matches) {
+      inputRef.current?.focus()
+    }
   }, [minimized, thread.id])
 
   const send = async () => {
@@ -103,7 +107,8 @@ export default function ChatModal({ thread, onUpdate, onClose }) {
   // ── Full modal ─────────────────────────────────────────────────────────────
   return (
     <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) setMinimized(true) }}>
-      <div style={S.modal}>
+      <style>{modalCSS}</style>
+      <div className="chat-modal" style={S.modal}>
 
         {/* Header */}
         <div style={S.header}>
@@ -122,16 +127,23 @@ export default function ChatModal({ thread, onUpdate, onClose }) {
             </div>
           </div>
 
-          {/* Guide brief recap */}
+          {/* Guide brief — collapsed by default */}
           {thread.sections?.length > 0 && (
-            <div style={S.recap}>
-              <div style={S.recapLabel}>📋 Guide brief</div>
-              {thread.sections.map((sec, i) => (
-                <div key={i} style={{ marginBottom: i < thread.sections.length - 1 ? 8 : 0 }}>
-                  <div style={S.recapTitle}>{sec.title}</div>
-                  <div style={S.recapBody}>{sec.body}</div>
+            <div style={{ borderTop: '1px solid #142030' }}>
+              <button style={S.briefToggle} onClick={() => setBriefExpanded(v => !v)}>
+                <span>📋 Guide brief</span>
+                <span style={{ color: '#38bdf8', fontSize: 10 }}>{briefExpanded ? '▲ hide' : '▼ show'}</span>
+              </button>
+              {briefExpanded && (
+                <div style={S.recap}>
+                  {thread.sections.map((sec, i) => (
+                    <div key={i} style={{ marginBottom: i < thread.sections.length - 1 ? 8 : 0 }}>
+                      <div style={S.recapTitle}>{sec.title}</div>
+                      <div style={S.recapBody}>{sec.body}</div>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
         </div>
@@ -174,6 +186,7 @@ export default function ChatModal({ thread, onUpdate, onClose }) {
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={handleKey}
+            enterKeyHint="send"
             rows={1}
             disabled={loading}
           />
@@ -207,14 +220,14 @@ const S = {
     display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
   },
   modal: {
-    width: '100%', maxWidth: 560, height: '85vh',
+    width: '100%', maxWidth: 560,
     background: '#0d1f2d', borderRadius: '16px 16px 0 0',
     border: '1px solid #1e3a4a',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   header: {
     background: '#0a1f2e', borderBottom: '1px solid #1e3a4a',
-    flexShrink: 0, maxHeight: '45%', overflowY: 'auto',
+    flexShrink: 0,
   },
   headerTop: {
     display: 'flex', alignItems: 'flex-start',
@@ -231,11 +244,17 @@ const S = {
   headerBtn: {
     background: 'none', border: '1px solid #1e3a4a', color: '#64748b',
     borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12,
+    minWidth: 32, minHeight: 32,
   },
-  recap:      { padding: '0 16px 14px', borderTop: '1px solid #142030', marginTop: 2 },
-  recapLabel: { fontSize: 10, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px', padding: '10px 0 8px' },
+  briefToggle: {
+    width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    background: 'none', border: 'none', cursor: 'pointer',
+    padding: '8px 16px', color: '#38bdf8',
+    fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px',
+  },
+  recap:      { padding: '0 16px 14px' },
   recapTitle: { fontSize: 10, fontWeight: 700, color: '#7dd3fc', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 2 },
-  recapBody:  { fontSize: 11, color: '#94a3b8', lineHeight: 1.5 },
+  recapBody:  { fontSize: 11, color: '#94a3b8', lineHeight: 1.5, marginBottom: 8 },
   messages:   { flex: 1, overflowY: 'auto', padding: '14px 14px 0' },
   emptyState: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '30px 20px', textAlign: 'center' },
   emptyText:  { fontSize: 13, color: '#64748b', lineHeight: 1.6, maxWidth: 320 },
@@ -250,12 +269,27 @@ const S = {
   },
   input: {
     flex: 1, background: '#0d1f2d', border: '1px solid #1e3a4a',
-    borderRadius: 10, color: '#e2e8f0', fontSize: 13, padding: '10px 12px',
+    borderRadius: 10, color: '#e2e8f0',
+    fontSize: 16,  /* 16px prevents iOS Safari from auto-zooming on focus */
+    padding: '10px 12px',
     resize: 'none', outline: 'none', fontFamily: 'inherit', lineHeight: 1.4,
   },
   sendBtn: {
     background: '#38bdf8', border: 'none', borderRadius: 10,
-    color: '#0a1628', fontWeight: 800, fontSize: 16,
-    width: 40, cursor: 'pointer', flexShrink: 0,
+    color: '#0a1628', fontWeight: 800, fontSize: 18,
+    width: 44, height: 44, cursor: 'pointer', flexShrink: 0,
   },
 }
+
+const modalCSS = `
+/* dvh = dynamic viewport height: shrinks when the iOS keyboard appears,
+   so the modal always fits within the visible area */
+.chat-modal {
+  height: 85vh;
+}
+@supports (height: 85dvh) {
+  .chat-modal {
+    height: 85dvh;
+  }
+}
+`

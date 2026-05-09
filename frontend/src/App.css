@@ -27,6 +27,8 @@ body {
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
+  padding-top: env(safe-area-inset-top);
+  background: #0a1a2a; /* matches conditions bar so the inset area isn't a white flash */
 }
 
 /* ── Header ── */
