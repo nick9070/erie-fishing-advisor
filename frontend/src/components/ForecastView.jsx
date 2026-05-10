@@ -44,23 +44,226 @@ function ScoreBar({ score }) {
   )
 }
 
-function FactorPill({ label, value }) {
+const FACTOR_WEIGHTS = {
+  water_temp: 0.27, pressure: 0.20, wind: 0.13, monthly_qual: 0.18,
+  time_of_day: 0.08, solunar: 0.06, cloud_cover: 0.05, habitat_quality: 0.03,
+}
+const FACTOR_LABELS = {
+  water_temp: 'Water Temp', pressure: 'Pressure', wind: 'Wind', solunar: 'Solunar',
+  monthly_qual: 'Monthly Quality', time_of_day: 'Time of Day',
+  cloud_cover: 'Cloud Cover', habitat_quality: 'Habitat Quality',
+}
+
+function getFactorDetail(key, score, conditions, solunar) {
+  const hour = new Date().getHours()
+  switch (key) {
+    case 'water_temp': {
+      const temp = conditions?.water_temp_f
+      if (temp == null) return { rawValue: 'Buoy offline', explanation: 'Water temperature unavailable — nearest NDBC buoy may be offline. Score defaulted to 50.' }
+      let explanation
+      if (temp >= 63 && temp <= 75)      explanation = `${temp}°F is within the peak activity range (63–75°F). Aerobic scope is at or near maximum — fish are metabolically primed to feed aggressively.`
+      else if (temp >= 52 && temp < 63)  explanation = `${temp}°F is cool but usable. Smallmouth are active, but metabolism is below peak. Expect slower, more deliberate bites.`
+      else if (temp > 75 && temp <= 82)  explanation = `${temp}°F is warm. Eastern basin fish can retreat to the cooler metalimnion to regulate — less suppressive than in shallower water.`
+      else if (temp > 82)                explanation = `${temp}°F is above the comfortable range. Fish are likely heat-stressed and holding deep in the coolest available water.`
+      else                               explanation = `${temp}°F is below the usable threshold. Smallmouth metabolism slows sharply below 52°F. Fish are lethargic and feeding infrequently.`
+      return { rawValue: `${temp}°F water temperature`, explanation }
+    }
+    case 'pressure': {
+      const pres = conditions?.pressure_hpa
+      const trend = conditions?.pressure_trend || 'stable'
+      const trendLabel = { stable: 'stable', rising: 'rising', rising_fast: 'rising fast', falling: 'falling', falling_fast: 'falling fast' }[trend] || trend
+      const rawValue = pres != null ? `${pres} hPa — ${trendLabel}` : 'No buoy data'
+      const explanation = {
+        stable:       'Stable pressure is the best fishing condition. Fish are unstressed by barometric change and feed on their normal schedule.',
+        rising:       'Rising pressure signals a cold front has passed. Fish typically suppress feeding for 24–48 hours post-front. Expect a slow, finicky bite.',
+        rising_fast:  'Rapidly rising pressure — a hard cold front just moved through. Worst bite condition. Fish may not feed for 1–2 days.',
+        falling:      'Falling pressure signals an approaching front. Often a pre-front feeding window as fish sense the change and feed aggressively before shutting down.',
+        falling_fast: 'Pressure dropping fast — a front is arriving. Fish may feed briefly but conditions will deteriorate quickly.',
+      }[trend] || 'Pressure is within normal range.'
+      return { rawValue, explanation }
+    }
+    case 'wind': {
+      const speed = conditions?.wind_speed_mph
+      const dir   = conditions?.wind_dir_label
+      const rawValue = speed != null ? `${speed} mph ${dir || ''}`.trim() : 'No wind data'
+      let explanation
+      if (score >= 85)      explanation = `${speed} mph ${dir} — optimal. Wind pushes water onto this spot's structure, stacking baitfish on the windward face. Research shows >2× catch rates with 10–20 mph favorable wind.`
+      else if (score >= 70) explanation = `${speed} mph ${dir} — decent conditions. Wind speed or direction is slightly off, but fish are still actively using the structure.`
+      else if (speed > 25)  explanation = `${speed} mph — too rough. Boat control is dangerous above 25 mph and fish scatter in heavy chop.`
+      else if (speed < 5)   explanation = `${speed} mph — near calm. Without wind, forage doesn't concentrate on structure. Fish are scattered and less actively feeding.`
+      else                  explanation = `${speed} mph ${dir || ''} — wind direction doesn't push water onto this spot's structure, limiting the forage concentration effect.`
+      return { rawValue, explanation }
+    }
+    case 'solunar': {
+      const period   = solunar?.active_period || 'inactive'
+      const phase    = solunar?.moon_phase_pct
+      const nextMajor = solunar?.next_major_in_min
+      const phaseStr  = phase != null ? ` — Moon ${phase}%` : ''
+      const rawValue  = period === 'inactive' ? `No active period${phaseStr}` : `${period}${phaseStr}`
+      let explanation
+      if (period.includes('MAJOR'))       explanation = 'Currently in a major solunar period (moon overhead or underfoot). These 2-hour windows are associated with peak feeding bursts.'
+      else if (period.includes('minor'))  explanation = 'Currently in a minor solunar period (moonrise or moonset). A shorter 1-hour feeding window — less intense than a major period.'
+      else {
+        const majorStr = nextMajor != null ? `${Math.floor(nextMajor / 60)}h ${nextMajor % 60}m` : 'unknown'
+        explanation = `No active solunar period. Next major in ~${majorStr}. Note: solunar tables are weighted low (6%) — peer review (Stuart 2023) found limited correlation with actual catch rates on Lake Erie.`
+      }
+      return { rawValue, explanation }
+    }
+    case 'monthly_qual': {
+      const month = new Date().toLocaleString('default', { month: 'long' })
+      let explanation
+      if (score >= 80)      explanation = `This spot rates ${score}/100 for ${month} — one of its prime months. Habitat, depth, and structure align well with current seasonal fish behaviour.`
+      else if (score >= 60) explanation = `${score}/100 for ${month} — solid but not peak. Fish are present but may still be transitioning or not fully concentrated here.`
+      else if (score >= 40) explanation = `${score}/100 for ${month} — fair. The spot is fishable but this season's patterns don't favour its structure type as strongly.`
+      else                  explanation = `${score}/100 for ${month} — below average. Fish are likely using different structure or depth ranges than this spot offers right now.`
+      return { rawValue: `${month} quality: ${score}/100`, explanation }
+    }
+    case 'time_of_day': {
+      const ampm    = hour >= 12 ? 'PM' : 'AM'
+      const display = `${hour % 12 || 12}:00 ${ampm}`
+      let explanation
+      if (hour >= 5 && hour <= 8)          explanation = 'Dawn feeding window (5–8 AM). Smallmouth move to <2m depth at first light to ambush prey (Suski & Ridgway 2009). Best shallow bite of the day.'
+      else if (hour >= 17 && hour <= 20)   explanation = 'Dusk feeding window (5–8 PM). Second major feeding window as light fades. Fish move shallow and become aggressive — similar opportunity to dawn.'
+      else if (hour >= 9 && hour <= 11)    explanation = 'Post-dawn (9–11 AM). Fish are transitioning to mid-depth structure. Bite is slowing but still productive if you follow them down.'
+      else if (hour >= 21 || hour <= 4)    explanation = 'Night hours. Bite is generally slower, though summer nights can produce on topwater presentations.'
+      else                                 explanation = 'Mid-day (noon–4 PM). Smallmouth have moved to deeper structure to escape light and heat. Target thermocline depth and shaded rocky edges.'
+      return { rawValue: display, explanation }
+    }
+    default:
+      return { rawValue: null, explanation: 'No detail available.' }
+  }
+}
+
+function getOverallScoreExplanation(spot) {
+  const { score, breakdown, bonuses, spawn } = spot
+  const factors = Object.entries(breakdown || {})
+    .map(([key, val]) => ({ key, label: FACTOR_LABELS[key] || key, value: val, weight: FACTOR_WEIGHTS[key] || 0 }))
+    .sort((a, b) => b.value - a.value)
+  const top3    = factors.slice(0, 3)
+  const weakest = factors[factors.length - 1]
+  const modifierDefs = [
+    { key: 'spawn_penalty',    label: spawn?.label ? `${spawn.label} phase` : 'Spawn phase' },
+    { key: 'front_penalty',    label: 'Post-front suppression' },
+    { key: 'goby_bonus',       label: 'Goby forage' },
+    { key: 'catch_log',        label: 'Your catch history' },
+    { key: 'odnr_seasonal',    label: 'ODNR seasonal' },
+    { key: 'temp_trend',       label: 'Temp trend' },
+    { key: 'wind_persistence', label: 'Wind persistence' },
+    { key: 'current',          label: 'Surface current' },
+  ]
+  const activeModifiers = modifierDefs
+    .map(d => ({ label: d.label, value: bonuses?.[d.key] ?? 0 }))
+    .filter(m => m.value !== 0)
+  let summary
+  if (score >= 80)      summary = 'Conditions are stacked in your favour — this is a high-confidence spot right now.'
+  else if (score >= 65) summary = 'Solid overall. A few factors are holding the score back, but this spot is worth fishing.'
+  else if (score >= 50) summary = "Fair conditions. Fish are catchable here but don't expect lights-out action."
+  else if (score >= 35) summary = 'Below average. Conditions or timing are working against this spot today.'
+  else                  summary = 'Tough conditions. This spot is unlikely to produce well right now.'
+  return { top3, weakest, activeModifiers, summary }
+}
+
+function ScorePopup({ data, onClose }) {
+  const { label, score, rawValue, explanation } = data
+  const color = score >= 70 ? '#4ade80' : score >= 50 ? '#facc15' : '#f87171'
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={cardStyle} onClick={e => e.stopPropagation()}>
+        <div style={popupHeaderStyle}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
+          <button style={closeBtn} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+          <span style={{ color, fontSize: 48, fontWeight: 800, lineHeight: 1 }}>{score}</span>
+          <span style={{ color: '#475569', fontSize: 15, alignSelf: 'flex-end', marginBottom: 5 }}>/100</span>
+        </div>
+        {rawValue && <div style={rawValueStyle}>{rawValue}</div>}
+        <p style={explanationStyle}>{explanation}</p>
+      </div>
+    </div>
+  )
+}
+
+function OverallScorePopup({ spot, onClose }) {
+  const color = getScoreColor(spot.score)
+  const { top3, weakest, activeModifiers, summary } = getOverallScoreExplanation(spot)
+  return (
+    <div style={overlayStyle} onClick={onClose}>
+      <div style={cardStyle} onClick={e => e.stopPropagation()}>
+        <div style={popupHeaderStyle}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px', maxWidth: 220, lineHeight: 1.3 }}>{spot.spot_name}</span>
+          <button style={closeBtn} onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+          <span style={{ color, fontSize: 52, fontWeight: 800, lineHeight: 1 }}>{spot.score}</span>
+          <span style={{ color, fontSize: 14, fontWeight: 700 }}>{spot.rating}</span>
+        </div>
+        <div style={sectionStyle}>
+          <div style={sectionLabel}>Top factors</div>
+          {top3.map(f => (
+            <div key={f.key} style={explainRow}>
+              <span style={{ color: '#94a3b8', fontSize: 13 }}>{f.label}</span>
+              <span style={{ fontWeight: 700, fontSize: 14, color: f.value >= 70 ? '#4ade80' : f.value >= 50 ? '#facc15' : '#f87171' }}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+        <div style={sectionStyle}>
+          <div style={sectionLabel}>Holding it back</div>
+          <div style={explainRow}>
+            <span style={{ color: '#94a3b8', fontSize: 13 }}>{weakest.label}</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#f87171' }}>{weakest.value}</span>
+          </div>
+        </div>
+        {activeModifiers.length > 0 && (
+          <div style={sectionStyle}>
+            <div style={sectionLabel}>Score modifiers</div>
+            {activeModifiers.map((m, i) => (
+              <div key={i} style={explainRow}>
+                <span style={{ color: '#94a3b8', fontSize: 13 }}>{m.label}</span>
+                <span style={{ fontWeight: 700, fontSize: 14, color: m.value > 0 ? '#4ade80' : '#f87171' }}>{m.value > 0 ? '+' : ''}{m.value}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p style={{ ...explanationStyle, marginTop: 4 }}>{summary}</p>
+      </div>
+    </div>
+  )
+}
+
+const overlayStyle    = { position: 'fixed', inset: 0, zIndex: 999, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }
+const cardStyle       = { background: '#0d1f2d', border: '1px solid #1e3a4a', borderRadius: 14, width: '100%', maxWidth: 320, padding: 20, display: 'flex', flexDirection: 'column', gap: 12 }
+const popupHeaderStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+const closeBtn        = { background: 'none', border: '1px solid #1e3a4a', borderRadius: 6, color: '#64748b', fontSize: 13, width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+const rawValueStyle   = { background: '#071520', border: '1px solid #1e3a4a', borderRadius: 6, padding: '8px 12px', fontSize: 13, fontWeight: 600, color: '#e2e8f0' }
+const explanationStyle = { fontSize: 13, color: '#94a3b8', lineHeight: 1.6, margin: 0 }
+const sectionStyle    = { display: 'flex', flexDirection: 'column', gap: 6 }
+const sectionLabel    = { fontSize: 9, fontWeight: 700, color: '#38bdf8', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }
+const explainRow      = { display: 'flex', justifyContent: 'space-between', alignItems: 'center' }
+
+function FactorPill({ label, value, onTap }) {
   const color = value >= 70 ? '#4ade80' : value >= 50 ? '#facc15' : '#f87171'
   return (
-    <div style={{ background: '#0a1f2e', border: '1px solid #1e3a4a', borderRadius: 6, padding: '6px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+    <div
+      onClick={e => { e.stopPropagation(); onTap?.() }}
+      style={{ background: '#0a1f2e', border: '1px solid #1e3a4a', borderRadius: 6, padding: '6px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, cursor: 'pointer' }}
+    >
       <span style={{ fontSize: 9, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</span>
       <span style={{ fontSize: 16, fontWeight: 700, color }}>{value}</span>
+      <span style={{ fontSize: 9, color: '#334d66' }}>ⓘ</span>
     </div>
   )
 }
 
 function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour, onNewChat }) {
-  const [expanded,       setExpanded]       = useState(false)
-  const [aiText,         setAiText]         = useState(null)
-  const [aiLoad,         setAiLoad]         = useState(false)
-  const [aiError,        setAiError]        = useState(null)
-  const [catchModalOpen, setCatchModalOpen] = useState(false)
-  const [justLogged,     setJustLogged]     = useState(false)
+  const [expanded,        setExpanded]        = useState(false)
+  const [aiText,          setAiText]          = useState(null)
+  const [aiLoad,          setAiLoad]          = useState(false)
+  const [aiError,         setAiError]         = useState(null)
+  const [catchModalOpen,  setCatchModalOpen]  = useState(false)
+  const [justLogged,      setJustLogged]      = useState(false)
+  const [activePopup,     setActivePopup]     = useState(null)
+  const [scoreExplainOpen, setScoreExplainOpen] = useState(false)
 
   const color = getScoreColor(spot.score)
   const bd    = spot.breakdown
@@ -129,6 +332,16 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour, 
           <span style={{ color: '#475569', fontSize: 12, flexShrink: 0 }}>{expanded ? '▲' : '▼'}</span>
         </div>
 
+        {/* Score explanation button — always visible below score bar */}
+        <div style={{ padding: '0 16px 8px' }}>
+          <button
+            onClick={e => { e.stopPropagation(); setScoreExplainOpen(true) }}
+            style={{ width: '100%', background: 'transparent', border: '1px solid #1e5a7a', borderRadius: 6, color: '#38bdf8', fontSize: 11, fontWeight: 700, letterSpacing: '0.4px', textTransform: 'uppercase', padding: '6px 0', cursor: 'pointer' }}
+          >
+            Score Explanation
+          </button>
+        </div>
+
         {/* Expanded detail — not click-to-collapse */}
         {expanded && (
           <div style={{ padding: '0 16px 14px', display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid #1e3a4a', background: '#0f2d42' }}>
@@ -183,12 +396,24 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour, 
 
             {/* Factor breakdown */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
-              <FactorPill label="Water Temp" value={bd.water_temp} />
-              <FactorPill label="Pressure"   value={bd.pressure} />
-              <FactorPill label="Wind"       value={bd.wind} />
-              <FactorPill label="Solunar"    value={bd.solunar} />
-              <FactorPill label="Monthly"    value={bd.monthly_qual} />
-              <FactorPill label="Time"       value={bd.time_of_day} />
+              {[
+                { key: 'water_temp',   label: 'Water Temp', value: bd.water_temp },
+                { key: 'pressure',     label: 'Pressure',   value: bd.pressure },
+                { key: 'wind',         label: 'Wind',       value: bd.wind },
+                { key: 'solunar',      label: 'Solunar',    value: bd.solunar },
+                { key: 'monthly_qual', label: 'Monthly',    value: bd.monthly_qual },
+                { key: 'time_of_day',  label: 'Time',       value: bd.time_of_day },
+              ].map(({ key, label, value }) => (
+                <FactorPill
+                  key={key}
+                  label={label}
+                  value={value}
+                  onTap={() => {
+                    const detail = getFactorDetail(key, value, conditions, sol)
+                    setActivePopup({ label, score: value, ...detail })
+                  }}
+                />
+              ))}
             </div>
 
             {/* Bonuses */}
@@ -294,6 +519,9 @@ function ForecastSpotRow({ spot, apiBase, conditions, userLocation, date, hour, 
           }}
         />
       )}
+
+      {activePopup     && <ScorePopup data={activePopup} onClose={() => setActivePopup(null)} />}
+      {scoreExplainOpen && <OverallScorePopup spot={spot} onClose={() => setScoreExplainOpen(false)} />}
     </>
   )
 }
