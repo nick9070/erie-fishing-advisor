@@ -162,6 +162,111 @@ function FactorPill({ label, value, onTap }) {
   )
 }
 
+const FACTOR_LABELS = {
+  water_temp:      'Water Temp',
+  pressure:        'Pressure',
+  wind:            'Wind',
+  solunar:         'Solunar',
+  monthly_qual:    'Monthly Quality',
+  time_of_day:     'Time of Day',
+  cloud_cover:     'Cloud Cover',
+  habitat_quality: 'Habitat Quality',
+}
+
+const WEIGHTS = {
+  water_temp: 0.27, pressure: 0.20, wind: 0.13, monthly_qual: 0.18,
+  time_of_day: 0.08, solunar: 0.06, cloud_cover: 0.05, habitat_quality: 0.03,
+}
+
+function getOverallScoreExplanation(spot) {
+  const { score, rating, breakdown, bonuses, spawn } = spot
+
+  const factors = Object.entries(breakdown || {})
+    .map(([key, val]) => ({ key, label: FACTOR_LABELS[key] || key, value: val, weight: WEIGHTS[key] || 0 }))
+    .sort((a, b) => b.value - a.value)
+
+  const top3    = factors.slice(0, 3)
+  const weakest = factors[factors.length - 1]
+
+  const modifierDefs = [
+    { key: 'spawn_penalty',    label: spawn?.label ? `${spawn.label} phase` : 'Spawn phase' },
+    { key: 'front_penalty',    label: 'Post-front suppression' },
+    { key: 'goby_bonus',       label: 'Goby forage' },
+    { key: 'catch_log',        label: 'Your catch history' },
+    { key: 'odnr_seasonal',    label: 'ODNR seasonal' },
+    { key: 'temp_trend',       label: 'Temp trend' },
+    { key: 'wind_persistence', label: 'Wind persistence' },
+    { key: 'current',          label: 'Surface current' },
+  ]
+  const activeModifiers = modifierDefs
+    .map(d => ({ label: d.label, value: bonuses?.[d.key] ?? 0 }))
+    .filter(m => m.value !== 0)
+
+  let summary
+  if (score >= 80)      summary = 'Conditions are stacked in your favour — this is a high-confidence spot right now.'
+  else if (score >= 65) summary = 'Solid overall. A few factors are holding the score back, but this spot is worth fishing.'
+  else if (score >= 50) summary = 'Fair conditions. Fish are catchable here but don\'t expect lights-out action.'
+  else if (score >= 35) summary = 'Below average. Conditions or timing are working against this spot today.'
+  else                  summary = 'Tough conditions. This spot is unlikely to produce well right now.'
+
+  return { factors, top3, weakest, activeModifiers, summary }
+}
+
+function OverallScorePopup({ spot, onClose }) {
+  const color = getScoreColor(spot.score)
+  const { top3, weakest, activeModifiers, summary } = getOverallScoreExplanation(spot)
+
+  return (
+    <div className="popup-overlay" onClick={onClose}>
+      <div className="popup-card" onClick={e => e.stopPropagation()}>
+        <div className="popup-header">
+          <span className="popup-title" style={{ fontSize: 12, maxWidth: 220, lineHeight: 1.3 }}>{spot.spot_name}</span>
+          <button className="popup-close" onClick={onClose}>✕</button>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 4 }}>
+          <span style={{ color, fontSize: 52, fontWeight: 800, lineHeight: 1 }}>{spot.score}</span>
+          <span style={{ color, fontSize: 14, fontWeight: 700 }}>{spot.rating}</span>
+        </div>
+
+        <div className="explain-section">
+          <div className="explain-section-label">Top factors</div>
+          {top3.map(f => (
+            <div key={f.key} className="explain-row">
+              <span className="explain-name">{f.label}</span>
+              <span className={`explain-score ${f.value >= 70 ? 'good' : f.value >= 50 ? 'ok' : 'bad'}`}>{f.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="explain-section">
+          <div className="explain-section-label">Holding it back</div>
+          <div className="explain-row">
+            <span className="explain-name">{weakest.label}</span>
+            <span className="explain-score bad">{weakest.value}</span>
+          </div>
+        </div>
+
+        {activeModifiers.length > 0 && (
+          <div className="explain-section">
+            <div className="explain-section-label">Score modifiers</div>
+            {activeModifiers.map((m, i) => (
+              <div key={i} className="explain-row">
+                <span className="explain-name">{m.label}</span>
+                <span className={m.value > 0 ? 'modifier-pos' : 'modifier-neg'}>
+                  {m.value > 0 ? '+' : ''}{m.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <p className="popup-explanation" style={{ marginTop: 4 }}>{summary}</p>
+      </div>
+    </div>
+  )
+}
+
 function AiExplain({ spot, conditions, apiBase }) {
   const [text, setText] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -211,9 +316,10 @@ function AiExplain({ spot, conditions, apiBase }) {
 }
 
 export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions, userLocation, apiBase }) {
-  const [catchModalSpot, setCatchModalSpot] = useState(null)
-  const [catchSavedSpot, setCatchSavedSpot] = useState(null)
-  const [activePopup, setActivePopup] = useState(null)
+  const [catchModalSpot,   setCatchModalSpot]   = useState(null)
+  const [catchSavedSpot,   setCatchSavedSpot]   = useState(null)
+  const [activePopup,      setActivePopup]      = useState(null)
+  const [scoreExplainSpot, setScoreExplainSpot] = useState(null)
   const selectedRef = useRef(null)
 
   useEffect(() => {
@@ -259,6 +365,14 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
                 )}
               </div>
             </div>
+
+            {/* Score explanation button */}
+            <button
+              className="score-explain-btn"
+              onClick={e => { e.stopPropagation(); setScoreExplainSpot(spot) }}
+            >
+              Score Explanation
+            </button>
 
             {/* Depth badge — adjusts for shallow bite / thermocline / standard */}
             {depth?.target_depth_ft && (
@@ -386,7 +500,8 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
         )
       })}
 
-      {activePopup && <ScorePopup data={activePopup} onClose={() => setActivePopup(null)} />}
+      {activePopup      && <ScorePopup data={activePopup} onClose={() => setActivePopup(null)} />}
+      {scoreExplainSpot && <OverallScorePopup spot={scoreExplainSpot} onClose={() => setScoreExplainSpot(null)} />}
 
       {catchModalSpot && (
         <CatchLogModal
@@ -544,6 +659,37 @@ const styles = `
 .factor-label { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
 .factor-value { font-size: 16px; font-weight: 700; }
 .factor-info { font-size: 9px; color: #334d66; margin-top: 1px; }
+
+.score-explain-btn {
+  width: 100%; margin-top: 8px;
+  background: transparent;
+  border: 1px solid #1e5a7a;
+  border-radius: 6px;
+  color: #38bdf8;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.4px; text-transform: uppercase;
+  padding: 6px 0; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.score-explain-btn:hover { background: #071a2a; border-color: #38bdf8; }
+.score-explain-btn:active { background: #0c2a3e; }
+
+.explain-section { display: flex; flex-direction: column; gap: 6px; }
+.explain-section-label {
+  font-size: 9px; font-weight: 700; color: #38bdf8;
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;
+}
+.explain-row {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px;
+}
+.explain-name { color: #94a3b8; }
+.explain-score { font-weight: 700; font-size: 14px; }
+.explain-score.good { color: #4ade80; }
+.explain-score.ok   { color: #facc15; }
+.explain-score.bad  { color: #f87171; }
+.modifier-pos { font-weight: 700; color: #4ade80; }
+.modifier-neg { font-weight: 700; color: #f87171; }
 
 .popup-overlay {
   position: fixed; inset: 0; z-index: 999;
