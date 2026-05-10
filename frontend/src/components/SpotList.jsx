@@ -19,12 +19,145 @@ function ScoreBar({ score }) {
   )
 }
 
-function FactorPill({ label, value }) {
+function getFactorDetail(key, score, conditions, solunar) {
+  const hour = new Date().getHours()
+
+  switch (key) {
+    case 'water_temp': {
+      const temp = conditions?.water_temp_f
+      if (temp == null) return {
+        rawValue: 'Buoy offline',
+        explanation: 'Water temperature unavailable — nearest NDBC buoy may be offline. Score defaulted to 50.',
+      }
+      let explanation
+      if (temp >= 63 && temp <= 75)
+        explanation = `${temp}°F is within the peak activity range (63–75°F). Aerobic scope is at or near maximum — fish are metabolically primed to feed aggressively.`
+      else if (temp >= 52 && temp < 63)
+        explanation = `${temp}°F is cool but usable. Smallmouth are active, but metabolism is below peak. Expect slower, more deliberate bites.`
+      else if (temp > 75 && temp <= 82)
+        explanation = `${temp}°F is warm. Eastern basin fish can retreat to the cooler metalimnion (thermocline layer) to regulate — less suppressive than in shallower water.`
+      else if (temp > 82)
+        explanation = `${temp}°F is above the comfortable range. Fish are likely heat-stressed and holding deep in the coolest available water.`
+      else
+        explanation = `${temp}°F is below the usable threshold. Smallmouth metabolism slows sharply below 52°F. Fish are lethargic and feeding infrequently.`
+      return { rawValue: `${temp}°F water temperature`, explanation }
+    }
+
+    case 'pressure': {
+      const pres = conditions?.pressure_hpa
+      const trend = conditions?.pressure_trend || 'stable'
+      const trendLabel = { stable: 'stable', rising: 'rising', rising_fast: 'rising fast', falling: 'falling', falling_fast: 'falling fast' }[trend] || trend
+      const rawValue = pres != null ? `${pres} hPa — ${trendLabel}` : 'No buoy data'
+      const explanation = {
+        stable:       'Stable pressure is the best fishing condition. Fish are unstressed by barometric change and feed on their normal schedule.',
+        rising:       'Rising pressure signals a cold front has passed. Fish typically suppress feeding for 24–48 hours post-front as they adjust. Expect a slow, finicky bite.',
+        rising_fast:  'Rapidly rising pressure — a hard cold front just moved through. This is the worst bite condition. Fish may not feed for 1–2 days.',
+        falling:      'Falling pressure signals an approaching front. There is often a pre-front feeding window as fish sense the change and feed aggressively before shutting down.',
+        falling_fast: 'Pressure dropping fast — a front is arriving. Fish may feed briefly but conditions will deteriorate quickly.',
+      }[trend] || 'Pressure is within normal range.'
+      return { rawValue, explanation }
+    }
+
+    case 'wind': {
+      const speed = conditions?.wind_speed_mph
+      const dir = conditions?.wind_dir_label
+      const rawValue = speed != null ? `${speed} mph ${dir || ''}`.trim() : 'No wind data'
+      let explanation
+      if (score >= 85)
+        explanation = `${speed} mph ${dir} — optimal. Wind direction pushes water onto this spot's structure, stacking baitfish on the windward face. Research shows >2× catch rates with 10–20 mph favorable wind.`
+      else if (score >= 70)
+        explanation = `${speed} mph ${dir} — decent conditions. Wind speed or direction is slightly off, but fish are still actively using the structure.`
+      else if (speed > 25)
+        explanation = `${speed} mph — too rough. Boat control is dangerous above 25 mph and fish scatter in heavy chop.`
+      else if (speed < 5)
+        explanation = `${speed} mph — near calm. Without wind, forage doesn't concentrate on structure. Fish are scattered and less actively feeding.`
+      else
+        explanation = `${speed} mph ${dir || ''} — wind direction doesn't push water onto this spot's structure, limiting the forage concentration effect.`
+      return { rawValue, explanation }
+    }
+
+    case 'solunar': {
+      const period = solunar?.active_period || 'inactive'
+      const phase = solunar?.moon_phase_pct
+      const nextMajor = solunar?.next_major_in_min
+      const phaseStr = phase != null ? ` — Moon ${phase}%` : ''
+      const rawValue = period === 'inactive' ? `No active period${phaseStr}` : `${period}${phaseStr}`
+      let explanation
+      if (period.includes('MAJOR'))
+        explanation = 'Currently in a major solunar period (moon directly overhead or underfoot). These 2-hour windows are associated with peak feeding bursts in solunar theory.'
+      else if (period.includes('minor'))
+        explanation = 'Currently in a minor solunar period (moonrise or moonset). A shorter 1-hour feeding window — less intense than a major period.'
+      else {
+        const majorStr = nextMajor != null ? `${Math.floor(nextMajor / 60)}h ${nextMajor % 60}m` : 'unknown'
+        explanation = `No active solunar period. Next major in ~${majorStr}. Note: solunar tables are weighted low (6%) — peer review (Stuart 2023) found limited correlation with actual catch rates on Lake Erie.`
+      }
+      return { rawValue, explanation }
+    }
+
+    case 'monthly_qual': {
+      const month = new Date().toLocaleString('default', { month: 'long' })
+      let explanation
+      if (score >= 80)
+        explanation = `This spot rates ${score}/100 for ${month} — one of its prime months. Habitat, depth, and structure align well with current seasonal fish behaviour.`
+      else if (score >= 60)
+        explanation = `${score}/100 for ${month} — solid but not peak. Fish are present but may still be transitioning or not fully concentrated on this structure.`
+      else if (score >= 40)
+        explanation = `${score}/100 for ${month} — fair. The spot is fishable but this season's patterns don't favour its structure type as strongly.`
+      else
+        explanation = `${score}/100 for ${month} — below average. Fish are likely using different structure or depth ranges than this spot offers right now.`
+      return { rawValue: `${month} quality: ${score}/100`, explanation }
+    }
+
+    case 'time_of_day': {
+      const ampm = hour >= 12 ? 'PM' : 'AM'
+      const display = `${hour % 12 || 12}:00 ${ampm}`
+      let explanation
+      if (hour >= 5 && hour <= 8)
+        explanation = 'Dawn feeding window (5–8 AM). Smallmouth move to <2m depth at first light to ambush prey (Suski & Ridgway 2009). The best shallow bite of the day — work structure aggressively.'
+      else if (hour >= 17 && hour <= 20)
+        explanation = 'Dusk feeding window (5–8 PM). Second major feeding window as light fades. Fish move shallow again and become aggressive — similar opportunity to dawn.'
+      else if (hour >= 9 && hour <= 11)
+        explanation = 'Post-dawn (9–11 AM). Fish are transitioning from shallow to mid-depth structure. Bite is slowing but still productive if you follow them down.'
+      else if (hour >= 21 || hour <= 4)
+        explanation = 'Night hours. Bite is generally slower, though summer nights can produce on surface or topwater presentations. Fish rely more on lateral line than vision.'
+      else
+        explanation = 'Mid-day (noon–4 PM). Smallmouth have moved to deeper structure to escape light intensity and heat. Target thermocline depth and shaded rocky edges.'
+      return { rawValue: display, explanation }
+    }
+
+    default:
+      return { rawValue: null, explanation: 'No detail available.' }
+  }
+}
+
+function ScorePopup({ data, onClose }) {
+  const { label, score, rawValue, explanation } = data
+  const color = score >= 70 ? '#4ade80' : score >= 50 ? '#facc15' : '#f87171'
+  return (
+    <div className="popup-overlay" onClick={onClose}>
+      <div className="popup-card" onClick={e => e.stopPropagation()}>
+        <div className="popup-header">
+          <span className="popup-title">{label}</span>
+          <button className="popup-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="popup-score-row">
+          <span style={{ color, fontSize: 48, fontWeight: 800, lineHeight: 1 }}>{score}</span>
+          <span style={{ color: '#475569', fontSize: 15, alignSelf: 'flex-end', marginBottom: 6 }}>/100</span>
+        </div>
+        {rawValue && <div className="popup-raw">{rawValue}</div>}
+        <p className="popup-explanation">{explanation}</p>
+      </div>
+    </div>
+  )
+}
+
+function FactorPill({ label, value, onTap }) {
   const color = value >= 70 ? '#4ade80' : value >= 50 ? '#facc15' : '#f87171'
   return (
-    <div className="factor-pill">
+    <div className="factor-pill" onClick={e => { e.stopPropagation(); onTap?.() }}>
       <span className="factor-label">{label}</span>
       <span className="factor-value" style={{ color }}>{value}</span>
+      <span className="factor-info">ⓘ</span>
     </div>
   )
 }
@@ -80,6 +213,7 @@ function AiExplain({ spot, conditions, apiBase }) {
 export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions, userLocation, apiBase }) {
   const [catchModalSpot, setCatchModalSpot] = useState(null)
   const [catchSavedSpot, setCatchSavedSpot] = useState(null)
+  const [activePopup, setActivePopup] = useState(null)
   const selectedRef = useRef(null)
 
   useEffect(() => {
@@ -179,12 +313,24 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
                 {/* Factor breakdown */}
                 {bd && (
                   <div className="factors-grid">
-                    <FactorPill label="Water Temp" value={bd.water_temp} />
-                    <FactorPill label="Pressure" value={bd.pressure} />
-                    <FactorPill label="Wind" value={bd.wind} />
-                    <FactorPill label="Solunar" value={bd.solunar} />
-                    <FactorPill label="Monthly" value={bd.monthly_qual} />
-                    <FactorPill label="Time" value={bd.time_of_day} />
+                    {[
+                      { key: 'water_temp',   label: 'Water Temp', value: bd.water_temp },
+                      { key: 'pressure',     label: 'Pressure',   value: bd.pressure },
+                      { key: 'wind',         label: 'Wind',       value: bd.wind },
+                      { key: 'solunar',      label: 'Solunar',    value: bd.solunar },
+                      { key: 'monthly_qual', label: 'Monthly',    value: bd.monthly_qual },
+                      { key: 'time_of_day',  label: 'Time',       value: bd.time_of_day },
+                    ].map(({ key, label, value }) => (
+                      <FactorPill
+                        key={key}
+                        label={label}
+                        value={value}
+                        onTap={() => {
+                          const detail = getFactorDetail(key, value, conditions, spot.solunar)
+                          setActivePopup({ label, score: value, ...detail })
+                        }}
+                      />
+                    ))}
                   </div>
                 )}
 
@@ -239,6 +385,8 @@ export default function SpotList({ spots, selectedSpot, onSelectSpot, conditions
           </div>
         )
       })}
+
+      {activePopup && <ScorePopup data={activePopup} onClose={() => setActivePopup(null)} />}
 
       {catchModalSpot && (
         <CatchLogModal
@@ -389,9 +537,45 @@ const styles = `
 .factor-pill {
   background: #0a1f2e; border: 1px solid #1e3a4a; border-radius: 6px;
   padding: 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  cursor: pointer; position: relative; transition: border-color 0.12s, background 0.12s;
 }
+.factor-pill:hover { background: #0d2a40; border-color: #38bdf8; }
+.factor-pill:active { background: #0f3550; }
 .factor-label { font-size: 9px; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
 .factor-value { font-size: 16px; font-weight: 700; }
+.factor-info { font-size: 9px; color: #334d66; margin-top: 1px; }
+
+.popup-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.popup-card {
+  background: #0d1f2d; border: 1px solid #1e3a4a; border-radius: 14px;
+  width: 100%; max-width: 320px; padding: 20px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.popup-header {
+  display: flex; justify-content: space-between; align-items: center;
+}
+.popup-title {
+  font-size: 11px; font-weight: 700; color: #38bdf8;
+  text-transform: uppercase; letter-spacing: 0.6px;
+}
+.popup-close {
+  background: none; border: 1px solid #1e3a4a; border-radius: 6px;
+  color: #64748b; font-size: 13px; width: 30px; height: 30px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.popup-score-row { display: flex; align-items: baseline; gap: 4px; }
+.popup-raw {
+  background: #071520; border: 1px solid #1e3a4a; border-radius: 6px;
+  padding: 8px 12px; font-size: 13px; font-weight: 600; color: #e2e8f0;
+}
+.popup-explanation {
+  font-size: 13px; color: #94a3b8; line-height: 1.6; margin: 0;
+}
 
 .bonuses-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .bonus-chip {
