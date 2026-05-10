@@ -11,7 +11,8 @@ export default defineConfig({
       manifest: false, // we manage manifest.json ourselves in /public
       workbox: {
         // Cache the app shell and API responses for offline resilience
-        globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
+        globPatterns: ['**/*.{js,css,html,svg,ico}', '**/*.png'],
+        globIgnores: ['apple-touch-icon*.png', 'favicon*.png'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/[a-z.]+openweathermap\.org\/.*/i,
